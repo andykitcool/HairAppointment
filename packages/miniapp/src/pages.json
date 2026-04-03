@@ -1,0 +1,107 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/booking/create",
+      "style": {
+        "navigationBarTitleText": "创建预约"
+      }
+    },
+    {
+      "path": "pages/appointment/list",
+      "style": {
+        "navigationBarTitleText": "我的预约"
+      }
+    },
+    {
+      "path": "pages/profile/index",
+      "style": {
+        "navigationBarTitleText": "个人中心"
+      }
+    }
+  ],
+  "subPackages": [
+    {
+      "root": "pages/owner",
+      "pages": [
+        {
+          "path": "dashboard",
+          "style": { "navigationBarTitleText": "店务总览" }
+        },
+        {
+          "path": "appointments",
+          "style": { "navigationBarTitleText": "预约管理" }
+        },
+        {
+          "path": "proxy-booking",
+          "style": { "navigationBarTitleText": "代预约" }
+        },
+        {
+          "path": "services",
+          "style": { "navigationBarTitleText": "服务管理" }
+        },
+        {
+          "path": "billing",
+          "style": { "navigationBarTitleText": "手动记账" }
+        },
+        {
+          "path": "schedule",
+          "style": { "navigationBarTitleText": "营业设置" }
+        },
+        {
+          "path": "customers",
+          "style": { "navigationBarTitleText": "顾客管理" }
+        },
+        {
+          "path": "notifications",
+          "style": { "navigationBarTitleText": "消息通知" }
+        },
+        {
+          "path": "stats",
+          "style": { "navigationBarTitleText": "营收统计" }
+        },
+        {
+          "path": "apply",
+          "style": { "navigationBarTitleText": "申请成为店长" }
+        }
+      ]
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "美发预约",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F5F5F5"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#000000",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/appointment/list",
+        "text": "预约",
+        "iconPath": "static/tab/appointment.png",
+        "selectedIconPath": "static/tab/appointment-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/profile.png",
+        "selectedIconPath": "static/tab/profile-active.png"
+      }
+    ]
+  }
+}

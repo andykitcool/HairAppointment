@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+*.log
+packages/miniapp
+packages/admin/dist
+packages/server/dist
+packages/shared/dist
+.git
+.codebuddy
+*.png
+*.jpg
+*.jpeg
+美发预约记账系统-开发规范文档v4.md

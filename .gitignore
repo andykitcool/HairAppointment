@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.env
+*.local
+.DS_Store
+*.log
+packages/miniapp/dist/
+packages/miniapp/unpackage/
+packages/admin/dist/
+packages/server/dist/
+packages/shared/dist/

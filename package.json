@@ -1,0 +1,25 @@
+{
+  "name": "hair-appointment",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.5",
+  "description": "美发预约记账系统 - Monorepo",
+  "scripts": {
+    "dev:server": "pnpm --filter @hair/server dev",
+    "dev:miniapp": "pnpm --filter @hair/miniapp dev:mp-weixin",
+    "dev:admin": "pnpm --filter @hair/admin dev",
+    "build:server": "pnpm --filter @hair/server build",
+    "build:miniapp": "pnpm --filter @hair/miniapp build:mp-weixin",
+    "build:admin": "pnpm --filter @hair/admin build",
+    "build:shared": "pnpm --filter @hair/shared build",
+    "lint": "eslint packages/*/src --ext .ts,.vue",
+    "clean": "rimraf packages/*/dist"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.57.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.4.0"
+  }
+}
