@@ -1,13 +1,15 @@
 import Router from 'koa-router'
-import authRoutes from './auth'
-import appointmentRoutes from './appointment'
-import transactionRoutes from './transaction'
-import serviceRoutes from './service'
-import merchantRoutes from './merchant'
-import customerRoutes from './customer'
-import notificationRoutes from './notification'
-import adminRoutes from './admin'
-import feishuRoutes from './feishu'
+import authRoutes from './auth.js'
+import appointmentRoutes from './appointment.js'
+import transactionRoutes from './transaction.js'
+import serviceRoutes from './service.js'
+import merchantRoutes from './merchant.js'
+import customerRoutes from './customer.js'
+import notificationRoutes from './notification.js'
+import adminRoutes from './admin.js'
+import feishuRoutes from './feishu.js'
+import wechatConfigRoutes from './wechatConfig.js'
+import wechatMessageRoutes from './wechatMessage.js'
 
 export function registerRoutes(app: any) {
   const apiRouter = new Router()
@@ -22,9 +24,14 @@ export function registerRoutes(app: any) {
   apiRouter.use(notificationRoutes.routes(), notificationRoutes.allowedMethods())
   apiRouter.use(adminRoutes.routes(), adminRoutes.allowedMethods())
   apiRouter.use(feishuRoutes.routes(), feishuRoutes.allowedMethods())
+  apiRouter.use(wechatConfigRoutes.routes(), wechatConfigRoutes.allowedMethods())
 
   app.use(apiRouter.routes())
   app.use(apiRouter.allowedMethods())
+
+  // 微信消息接收（单独注册，不需要认证）
+  app.use(wechatMessageRoutes.routes())
+  app.use(wechatMessageRoutes.allowedMethods())
 
   // 健康检查
   app.use(async (ctx: any) => {

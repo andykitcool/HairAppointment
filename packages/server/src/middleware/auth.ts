@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
-import { UserModel } from '../models'
-import type { IJwtPayload } from '@hair/shared'
+import { UserModel, AdminModel } from '../models'
+import type { IJwtPayload } from '../../../shared/src/types'
 import type { Context, Next } from 'koa'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hair-appointment-jwt-secret'
@@ -24,7 +24,7 @@ export function verifyJwt(token: string): IJwtPayload | null {
 }
 
 /**
- * 小程序 JWT 认证中间件
+ * 小程序 JWT 认证中间件（支持用户和管理员）
  */
 export async function authMiddleware(ctx: Context, next: Next) {
   const authHeader = ctx.headers.authorization
@@ -42,8 +42,14 @@ export async function authMiddleware(ctx: Context, next: Next) {
     return
   }
 
-  // 查找用户
-  const user = await UserModel.findById(payload.user_id)
+  // 根据类型查找用户（支持 admin 和 customer/owner）
+  let user: any = null
+  if (payload.type === 'admin') {
+    user = await AdminModel.findById(payload.user_id)
+  } else {
+    user = await UserModel.findById(payload.user_id)
+  }
+  
   if (!user) {
     ctx.status = 401
     ctx.body = { code: 401, message: '用户不存在', data: null }
@@ -53,7 +59,7 @@ export async function authMiddleware(ctx: Context, next: Next) {
   ctx.state.user = {
     _id: user._id,
     openid: user.openid,
-    role: user.role,
+    role: payload.type === 'admin' ? 'super_admin' : user.role,
     merchant_id: user.merchant_id,
   }
   ctx.state.jwtPayload = payload

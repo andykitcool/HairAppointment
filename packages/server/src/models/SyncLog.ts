@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose'
 export interface ISyncLogDocument extends Document {
   merchant_id: string
   direction: string
-  collection: string
+  collectionName: string
   action: string
   record_id: string
   payload: Record<string, any>
@@ -16,7 +16,7 @@ export interface ISyncLogDocument extends Document {
 const SyncLogSchema = new Schema<ISyncLogDocument>({
   merchant_id: { type: String, required: true, index: true },
   direction: { type: String, required: true, enum: ['outbound', 'inbound'] },
-  collection: { type: String, required: true },
+  collectionName: { type: String, required: true },
   action: { type: String, required: true, enum: ['create', 'update', 'delete'] },
   record_id: { type: String, required: true },
   payload: { type: Schema.Types.Mixed, required: true },

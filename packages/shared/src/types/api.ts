@@ -139,7 +139,8 @@ export interface IAvailableSlot {
 /** JWT Payload */
 export interface IJwtPayload {
   user_id: string
-  openid: string
+  openid?: string
   role: string
   merchant_id?: string
+  type?: string
 }

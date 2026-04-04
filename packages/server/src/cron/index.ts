@@ -1,6 +1,6 @@
 import cron from 'node-cron'
 import { AppointmentModel, MerchantModel } from '../models'
-import { AUTO_CONFIRM_TIMEOUT, SYNC_MAX_RETRY, SyncStatus } from '@hair/shared'
+import { AUTO_CONFIRM_TIMEOUT, SYNC_MAX_RETRY, SyncStatus } from '../../../shared/src/index'
 
 let isRunning = false
 

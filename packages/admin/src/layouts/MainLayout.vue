@@ -25,7 +25,7 @@
           <span>记账管理</span>
         </el-menu-item>
         <el-menu-item index="/services">
-          <el-icon><Scissors /></el-icon>
+          <el-icon><DataAnalysis /></el-icon>
           <span>服务管理</span>
         </el-menu-item>
         <el-menu-item index="/customers">
@@ -46,10 +46,12 @@
             <el-icon><Setting /></el-icon>
             <span>系统设置</span>
           </template>
+          <el-menu-item index="/settings/profile">个人设置</el-menu-item>
           <el-menu-item index="/settings/coze">COZE 配置</el-menu-item>
           <el-menu-item index="/settings/feishu">飞书配置</el-menu-item>
           <el-menu-item index="/settings/sync">同步配置</el-menu-item>
           <el-menu-item index="/settings/notify">通知配置</el-menu-item>
+          <el-menu-item index="/settings/wechat">微信配置</el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu v-if="isAdmin" index="admin">
@@ -72,7 +74,8 @@
             </span>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+                <el-dropdown-item @click="$router.push('/settings/profile')">个人设置</el-dropdown-item>
+                <el-dropdown-item divided @click="handleLogout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -104,14 +107,24 @@ function handleLogout() {
   router.push('/login')
 }
 
-onMounted(async () => {
-  if (!authStore.isLoggedIn) {
-    // Check if there's an active session
+onMounted(() => {
+  // 从 localStorage 恢复登录状态
+  const token = localStorage.getItem('auth_token')
+  const storedUser = localStorage.getItem('auth_user')
+  console.log('MainLayout onMounted - token:', token?.substring(0, 10))
+  console.log('MainLayout onMounted - storedUser:', storedUser?.substring(0, 50))
+  if (!token || !storedUser) {
+    console.log('MainLayout: 未登录，跳转登录页')
+    router.push('/login')
+  } else {
+    // 恢复 store 状态
     try {
-      const { authApi } = await import('@/api/request')
-      const res = await authApi.getProfile() as any
-      if (res?.user) authStore.setUser(res.user)
-    } catch {
+      const user = JSON.parse(storedUser)
+      if (!authStore.isLoggedIn) {
+        authStore.setUser(user)
+      }
+    } catch (e) {
+      console.error('解析用户信息失败', e)
       router.push('/login')
     }
   }

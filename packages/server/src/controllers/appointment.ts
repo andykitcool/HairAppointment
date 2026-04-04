@@ -1,8 +1,8 @@
 import { Context } from 'koa'
 import { AppointmentModel, ServiceModel, StaffModel, MerchantModel, ShopClosedPeriodModel, TransactionModel, UserModel } from '../models'
-import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateAppointmentId, generateTimeSlots, formatDate } from '@hair/shared'
-import { AppointmentStatus } from '@hair/shared'
-import { generateAppointmentId as genAptId } from '@hair/shared'
+import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateAppointmentId, generateTimeSlots, formatDate } from '../../../shared/src/index'
+import { AppointmentStatus } from '../../../shared/src/index'
+import { generateAppointmentId as genAptId } from '../../../shared/src/index'
 
 /**
  * 查询可用时间段

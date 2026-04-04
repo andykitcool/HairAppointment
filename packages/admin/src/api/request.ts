@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import router from '@/router'
 
 const http: AxiosInstance = axios.create({
   baseURL: '/api',
@@ -8,6 +9,10 @@ const http: AxiosInstance = axios.create({
 })
 
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = localStorage.getItem('auth_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
   return config
 })
 
@@ -15,7 +20,10 @@ http.interceptors.response.use(
   (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
-      window.location.href = '/login'
+      alert(`API返回401错误\n路径: ${error.config?.url}`)
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('auth_user')
+      router.push('/login')
     }
     return Promise.reject(error)
   }
@@ -26,6 +34,26 @@ export default http
 export const authApi = {
   login: (data: { username: string; password: string }) => http.post('/auth/admin-login', data),
   getProfile: () => http.get('/auth/profile'),
+  // 管理员相关接口
+  getAdminProfile: () => http.get('/auth/admin/profile'),
+  changePassword: (data: { old_password: string; new_password: string }) => http.put('/auth/admin/password', data),
+  bindPhone: (data: { phone: string; code: string }) => http.put('/auth/admin/phone', data),
+  bindWechat: (data: { code: string }) => http.put('/auth/admin/wechat', data),
+  // 微信扫码登录
+  getWechatLoginQR: () => http.get('/auth/wechat-login-qr'),
+  checkWechatLoginStatus: (scene: string) => http.get('/auth/wechat-login-status', { params: { scene } }),
+  // 微信绑定
+  getWechatBindQR: () => http.get('/auth/wechat-bind-qr'),
+  checkWechatBindStatus: (scene: string) => http.get('/auth/wechat-bind-status', { params: { scene } }),
+}
+
+// 微信配置管理
+export const wechatConfigApi = {
+  getList: () => http.get('/wechat-config'),
+  getById: (id: string) => http.get(`/wechat-config/${id}`),
+  create: (data: any) => http.post('/wechat-config', data),
+  update: (id: string, data: any) => http.put(`/wechat-config/${id}`, data),
+  delete: (id: string) => http.delete(`/wechat-config/${id}`),
 }
 
 export const appointmentApi = {

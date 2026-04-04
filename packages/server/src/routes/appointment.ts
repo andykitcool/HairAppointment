@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as appointmentController from '../controllers/appointment'
 import { authMiddleware, requireOwner } from '../middleware/auth'
 import { cozeAuthMiddleware } from '../middleware/auth'

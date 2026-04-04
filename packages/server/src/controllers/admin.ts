@@ -1,7 +1,7 @@
 import { Context } from 'koa'
 import { MerchantModel, AdminModel, AppointmentModel, TransactionModel, UserModel } from '../models'
-import { generateShortId, PRESET_SERVICES, ServiceCategory } from '@hair/shared'
-import bcrypt from 'bcrypt'
+import { generateShortId, PRESET_SERVICES, ServiceCategory } from '../../../shared/src/index'
+import bcrypt from 'bcryptjs'
 
 /**
  * 获取所有门店列表
@@ -67,7 +67,7 @@ export async function createMerchant(ctx: Context) {
       const passwordHash = await bcrypt.hash(owner_password, 10)
       const admin = await AdminModel.create({
         username: owner_name,
-        password_hash,
+        password_hash: passwordHash,
         real_name: owner_name,
         is_active: true,
       })

@@ -1,0 +1,96 @@
+services:
+  # MongoDB 数据库
+  mongo:
+    image: mongo:7
+    container_name: hair-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27018:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=hair_appointment
+
+  # Redis 缓存
+  redis:
+    image: redis:7-alpine
+    container_name: hair-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6380:6379"
+
+  # 后端 API 服务 (使用本地编译代码 + 容器内安装依赖)
+  api:
+    image: node:20-alpine
+    container_name: hair-api-dev
+    working_dir: /app
+    volumes:
+      # 只挂载编译后的代码和 shared 源码
+      - ./packages/server/dist/server/src:/app/packages/server/dist
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+    ports:
+      - "3100:3000"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_URI=mongodb://mongo:27017/hair_appointment
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - JWT_SECRET=hair-appointment-dev-secret-2026
+      - PORT=3000
+      - WX_APPID=${WX_APPID}
+      - WX_APPSECRET=${WX_APPSECRET}
+    command: >
+      sh -c "
+        npm install koa koa-router koa-body @koa/cors mongoose ioredis bcryptjs jsonwebtoken dotenv node-cron axios dayjs @paralleldrive/cuid2 @noble/hashes &&
+        node packages/server/dist/app.js
+      "
+    depends_on:
+      - mongo
+      - redis
+
+  # Web 管理后台 (开发模式，Vite热重载)
+  admin:
+    image: node:20-alpine
+    container_name: hair-admin-dev
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/packages/admin/node_modules
+      - /app/packages/shared/node_modules
+    ports:
+      - "9080:5173"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:3100/api
+    command: >
+      sh -c "
+        npm install -g pnpm &&
+        pnpm install &&
+        pnpm --filter @hair/shared build &&
+        cd packages/admin &&
+        npx vite --host 0.0.0.0 --port 5173
+      "
+    depends_on:
+      - api
+    stdin_open: true
+    tty: true
+
+  # NPS 内网穿透客户端（仅开发环境使用）
+  npc:
+    image: yisier1/npc:latest
+    container_name: hair-npc
+    restart: unless-stopped
+    command: >
+      -server=123.57.100.122:8024
+      -vkey=5j7jduu2y0uaqick
+      -type=tcp
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:
+  redis-data:

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # MongoDB 数据库
   mongo:
@@ -9,7 +7,7 @@ services:
     volumes:
       - mongo-data:/data/db
     ports:
-      - "27017:27017"
+      - "27018:27017"
 
   # Redis 缓存
   redis:
@@ -19,7 +17,7 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
   # 后端 API 服务
   api:
@@ -36,7 +34,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     ports:
-      - "3000:3000"
+      - "3100:3000"
     depends_on:
       - mongo
       - redis
@@ -49,7 +47,7 @@ services:
     container_name: hair-admin
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "9080:80"
     depends_on:
       - api
 

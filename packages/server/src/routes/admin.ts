@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as adminController from '../controllers/admin'
 import { authMiddleware } from '../middleware/auth'
 import { sessionAuthMiddleware } from '../middleware/session'

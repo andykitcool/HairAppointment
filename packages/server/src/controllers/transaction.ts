@@ -1,7 +1,7 @@
 import { Context } from 'koa'
 import { TransactionModel } from '../models'
-import { generateShortId } from '@hair/shared'
-import { formatDate } from '@hair/shared'
+import { generateShortId } from '../../../shared/src/index'
+import { formatDate } from '../../../shared/src/index'
 
 /**
  * 创建交易记录

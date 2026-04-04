@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as feishuController from '../controllers/feishu'
 import { cozeAuthMiddleware } from '../middleware/auth'
 

@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as notificationController from '../controllers/notification'
 import { authMiddleware, requireOwner } from '../middleware/auth'
 import { cozeAuthMiddleware } from '../middleware/auth'

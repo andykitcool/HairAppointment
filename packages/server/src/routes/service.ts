@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as serviceController from '../controllers/service'
 import { authMiddleware } from '../middleware/auth'
 

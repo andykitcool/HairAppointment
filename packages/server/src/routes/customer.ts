@@ -1,4 +1,4 @@
-import Router from '@koa/router'
+import Router from 'koa-router'
 import * as customerController from '../controllers/customer'
 import { authMiddleware, requireOwner } from '../middleware/auth'
 

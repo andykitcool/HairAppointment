@@ -1,6 +1,6 @@
 import { Context } from 'koa'
 import { ServiceModel } from '../models'
-import { generateShortId, PRESET_SERVICES } from '@hair/shared'
+import { generateShortId, PRESET_SERVICES } from '../../../shared/src/index'
 
 /**
  * 获取服务列表

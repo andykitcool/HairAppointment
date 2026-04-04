@@ -1,7 +1,7 @@
 import { Context } from 'koa'
 import { MerchantModel, ShopClosedPeriodModel } from '../models'
 import { AppointmentModel } from '../models'
-import { AppointmentStatus } from '@hair/shared'
+import { AppointmentStatus } from '../../../shared/src/index'
 
 /**
  * 获取商户信息

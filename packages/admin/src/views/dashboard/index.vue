@@ -8,7 +8,7 @@
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card revenue">
-          <el-statistic title="今日营收" :value="((overview.todayRevenue || 0) / 100).toFixed(2)" prefix="¥" />
+          <el-statistic title="今日营收" :value="Number(((overview.todayRevenue || 0) / 100).toFixed(2))" prefix="¥" />
         </el-card>
       </el-col>
       <el-col :span="6">

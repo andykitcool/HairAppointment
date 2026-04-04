@@ -7,3 +7,4 @@ export { AppointmentModel, type IAppointmentDocument, type ITimelineStage } from
 export { TransactionModel, type ITransactionDocument, type ITransactionItemDoc } from './Transaction'
 export { ShopClosedPeriodModel, type IShopClosedPeriodDocument } from './ShopClosedPeriod'
 export { SyncLogModel, type ISyncLogDocument } from './SyncLog'
+export { WechatConfigModel, type IWechatConfigDocument } from './WechatConfig'
