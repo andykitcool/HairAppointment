@@ -27,10 +27,10 @@ const transactionController = __importStar(require("../controllers/transaction")
 const statsController = __importStar(require("../controllers/stats"));
 const auth_1 = require("../middleware/auth");
 const router = new koa_router_1.default({ prefix: '/api' });
-// 交易记录
-router.post('/transactions', auth_1.authMiddleware, transactionController.createTransaction);
-router.get('/transactions', auth_1.authMiddleware, transactionController.getTransactions);
-// 营收统计
-router.get('/stats/revenue', auth_1.authMiddleware, statsController.getRevenueStats);
+// 交易记录 - 店员和店长都可以创建和查看
+router.post('/transactions', auth_1.authMiddleware, auth_1.requireStaffOrOwner, transactionController.createTransaction);
+router.get('/transactions', auth_1.authMiddleware, auth_1.requireStaffOrOwner, transactionController.getTransactions);
+// 营收统计 - 店员和店长都可以查看
+router.get('/stats/revenue', auth_1.authMiddleware, auth_1.requireStaffOrOwner, statsController.getRevenueStats);
 exports.default = router;
 //# sourceMappingURL=transaction.js.map

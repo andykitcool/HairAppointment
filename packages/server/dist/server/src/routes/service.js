@@ -26,9 +26,11 @@ const koa_router_1 = __importDefault(require("koa-router"));
 const serviceController = __importStar(require("../controllers/service"));
 const auth_1 = require("../middleware/auth");
 const router = new koa_router_1.default({ prefix: '/api/services' });
+// 查询服务列表 - 仅需登录（顾客也需要查看服务）
 router.get('/', auth_1.authMiddleware, serviceController.getServices);
-router.post('/', auth_1.authMiddleware, serviceController.createService);
-router.put('/:id', auth_1.authMiddleware, serviceController.updateService);
-router.delete('/:id', auth_1.authMiddleware, serviceController.deleteService);
+// 服务管理（增删改）- 只有店长和超管可以操作，店员不能操作
+router.post('/', auth_1.authMiddleware, auth_1.requireOwner, serviceController.createService);
+router.put('/:id', auth_1.authMiddleware, auth_1.requireOwner, serviceController.updateService);
+router.delete('/:id', auth_1.authMiddleware, auth_1.requireOwner, serviceController.deleteService);
 exports.default = router;
 //# sourceMappingURL=service.js.map

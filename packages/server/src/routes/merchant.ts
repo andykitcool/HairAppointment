@@ -5,6 +5,10 @@ import { cozeAuthMiddleware } from '../middleware/auth'
 
 const router = new Router({ prefix: '/api/merchants' })
 
+// 店长申请入驻（小程序端）
+router.post('/apply', authMiddleware, merchantController.applyMerchant)
+router.get('/apply-status', authMiddleware, merchantController.getApplyStatus)
+
 // 公开/需认证的查询
 router.get('/:id', authMiddleware, merchantController.getMerchant)
 router.put('/:id', authMiddleware, requireOwner, merchantController.updateMerchant)

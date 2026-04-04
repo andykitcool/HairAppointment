@@ -8,6 +8,10 @@ export interface IAdminDocument extends Document {
   wx_openid?: string
   wx_unionid?: string
   is_active: boolean
+  // 新增字段
+  role: 'super_admin' | 'owner'
+  merchant_id?: string
+  type: 'system' | 'merchant'
   create_time: Date
   update_time: Date
 }
@@ -20,6 +24,10 @@ const AdminSchema = new Schema<IAdminDocument>({
   wx_openid: { type: String, default: '' },
   wx_unionid: { type: String, default: '' },
   is_active: { type: Boolean, required: true, default: true },
+  // 新增字段
+  role: { type: String, required: true, enum: ['super_admin', 'owner'], default: 'owner' },
+  merchant_id: { type: String, index: true },
+  type: { type: String, required: true, enum: ['system', 'merchant'], default: 'merchant' },
   create_time: { type: Date, default: Date.now },
   update_time: { type: Date, default: Date.now },
 })

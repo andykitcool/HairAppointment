@@ -91,8 +91,8 @@
     </el-dialog>
 
     <!-- 编辑配置对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑微信配置" width="500px" destroy-on-close>
-      <el-form :model="editForm" ref="editFormRef" label-width="140px">
+    <el-dialog v-model="showEditDialog" title="编辑微信配置" width="500px">
+      <el-form :model="editForm" ref="editFormRef" label-width="140px" v-loading="editLoading">
         <el-form-item label="AppID">
           <el-input v-model="editForm.appid" disabled />
         </el-form-item>
@@ -115,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { wechatConfigApi } from '@/api/request'
 
@@ -143,6 +143,7 @@ const formRules = {
 
 // 编辑对话框
 const showEditDialog = ref(false)
+const editLoading = ref(false)
 const editFormRef = ref()
 const editForm = reactive({
   _id: '',
@@ -202,13 +203,47 @@ async function handleCreate() {
 }
 
 // 编辑配置
-function handleEdit(row: any) {
-  editForm._id = row._id
-  editForm.appid = row.appid
+async function handleEdit(row: any) {
+  console.log('Editing row:', row)
+
+  // 重置表单
+  editForm._id = ''
+  editForm.appid = ''
   editForm.app_secret = ''
-  editForm.token = row.token === '***已设置***' ? '' : row.token
-  editForm.encoding_aes_key = row.encoding_aes_key === '***已设置***' ? '' : row.encoding_aes_key
+  editForm.token = ''
+  editForm.encoding_aes_key = ''
+
+  // 先打开对话框
   showEditDialog.value = true
+  editLoading.value = true
+
+  try {
+    // 调用详情接口获取真实数据
+    const res: any = await wechatConfigApi.getById(row._id)
+    console.log('Config detail:', res)
+
+    if (res.code === 0 && res.data) {
+      const config = res.data
+
+      // 赋值表单数据
+      editForm._id = config._id ? String(config._id) : ''
+      editForm.appid = config.appid || ''
+      editForm.app_secret = config.app_secret || ''
+      editForm.token = config.token || ''
+      editForm.encoding_aes_key = config.encoding_aes_key || ''
+
+      console.log('Edit form after assignment:', { ...editForm })
+    } else {
+      ElMessage.error(res.message || '获取配置详情失败')
+      showEditDialog.value = false
+    }
+  } catch (error: any) {
+    console.error('Get config detail error:', error)
+    ElMessage.error(error?.response?.data?.message || '获取配置详情失败')
+    showEditDialog.value = false
+  } finally {
+    editLoading.value = false
+  }
 }
 
 async function handleUpdate() {

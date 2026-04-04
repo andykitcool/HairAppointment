@@ -89,7 +89,7 @@ export interface IUser {
     avatar_url: string;
     phone: string;
     real_name?: string;
-    role: string;
+    role: 'customer' | 'pending_owner' | 'owner' | 'staff';
     merchant_id?: string;
     customer_note?: string;
     merchant_note?: string;
@@ -105,7 +105,13 @@ export interface IAdmin {
     username: string;
     password_hash: string;
     real_name: string;
+    phone?: string;
+    wx_openid?: string;
+    wx_unionid?: string;
     is_active: boolean;
+    role: 'super_admin' | 'merchant_admin';
+    merchant_id?: string;
+    type: 'system' | 'merchant';
     create_time: Date;
     update_time: Date;
 }
@@ -172,6 +178,16 @@ export interface ISyncConfig {
     enabled: boolean;
     bindings: ISyncBinding[];
 }
+/** 入驻申请信息 */
+export interface IApplicationInfo {
+    applicant_name: string;
+    applicant_phone: string;
+    applicant_wx_openid: string;
+    apply_time: Date;
+    review_note?: string;
+    review_time?: Date;
+    reviewer_id?: string;
+}
 /** 商户/门店 */
 export interface IMerchant {
     _id?: string;
@@ -180,13 +196,14 @@ export interface IMerchant {
     address?: string;
     phone: string;
     business_hours: IBusinessHours;
-    status: string;
+    status: 'pending' | 'applying' | 'active' | 'inactive' | 'rejected';
     description?: string;
     cover_image?: string;
     owner_id: string;
     daily_counter: number;
     counter_date: string;
     extended_hours?: IExtendedHours[];
+    application_info?: IApplicationInfo;
     coze_config?: ICozeConfig;
     feishu_config?: IFeishuConfig;
     notify_config?: INotifyConfig;

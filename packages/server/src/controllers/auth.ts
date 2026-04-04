@@ -145,10 +145,13 @@ export async function adminLogin(ctx: Context) {
       return
     }
 
+    // 使用数据库中的真实角色
+    const adminRole = admin.role || 'merchant_admin'
+
     // 生成 JWT Token
     const token = signJwt({
       user_id: admin._id.toString(),
-      role: 'super_admin',
+      role: adminRole,
       type: 'admin',
     })
 
@@ -157,7 +160,7 @@ export async function adminLogin(ctx: Context) {
       message: 'ok',
       data: {
         token,
-        role: 'super_admin',
+        role: adminRole,
         real_name: admin.real_name,
       },
     }
@@ -714,8 +717,13 @@ export async function checkBindStatus(ctx: Context) {
  * 处理微信扫码绑定事件（由服务号消息推送触发）
  */
 export async function handleWechatBindEvent(scene: string, openid: string) {
+  console.log(`[WechatBind] Handling bind event: scene=${scene}, openid=${openid}`)
+
   try {
     const bindData = bindQRStore.get(scene)
+    console.log(`[WechatBind] bindQRStore data:`, bindData)
+    console.log(`[WechatBind] bindQRStore keys:`, Array.from(bindQRStore.keys()))
+
     if (!bindData) {
       console.log(`[WechatBind] Scene ${scene} not found or expired`)
       return { success: false, message: '二维码已过期' }
@@ -725,11 +733,13 @@ export async function handleWechatBindEvent(scene: string, openid: string) {
     bindData.status = 'scanned'
     bindData.openid = openid
     bindQRStore.set(scene, bindData)
+    console.log(`[WechatBind] Updated status to 'scanned'`)
 
     // 检查该微信是否已被其他管理员绑定
     const { AdminModel } = await import('../models')
     const existing = await AdminModel.findOne({ wx_openid: openid, _id: { $ne: bindData.admin_id } })
     if (existing) {
+      console.log(`[WechatBind] Wechat already bound to another admin:`, existing._id)
       bindData.status = 'expired'
       bindData.message = '该微信已被其他账号绑定'
       bindQRStore.set(scene, bindData)
@@ -737,6 +747,7 @@ export async function handleWechatBindEvent(scene: string, openid: string) {
     }
 
     // 绑定微信到管理员账号
+    console.log(`[WechatBind] Binding openid ${openid} to admin ${bindData.admin_id}`)
     await AdminModel.findByIdAndUpdate(bindData.admin_id, { 
       wx_openid: openid,
     })
@@ -788,17 +799,20 @@ export async function handleWechatScanEvent(scene: string, openid: string) {
       return { success: false, message: '账号已被禁用' }
     }
 
+    // 使用数据库中的真实角色
+    const adminRole = admin.role || 'owner'
+
     // 生成JWT Token
     const token = signJwt({
       user_id: admin._id.toString(),
-      role: 'super_admin',
+      role: adminRole,
       type: 'admin',
     })
 
     // 更新状态为成功
     loginData.status = 'success'
     loginData.token = token
-    loginData.role = 'super_admin'
+    loginData.role = adminRole
     loginData.real_name = admin.real_name || ''
     loginQRStore.set(scene, loginData)
 

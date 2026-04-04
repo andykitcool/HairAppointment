@@ -69,12 +69,32 @@ export async function authMiddleware(ctx: Context, next: Next) {
 
 /**
  * 要求店长或超管权限
+ * 支持角色: owner (店长，包括小程序端和Web后台) / super_admin (超级管理员)
+ * 注意：店员(staff)不能访问
  */
 export function requireOwner(ctx: Context, next: Next) {
   const role = ctx.state.user?.role
-  if (role !== 'owner' && role !== 'staff') {
+  // 支持的角色：owner（店长）、super_admin（超级管理员）
+  const allowedRoles = ['owner', 'super_admin']
+  if (!allowedRoles.includes(role)) {
     ctx.status = 403
     ctx.body = { code: 403, message: '需要店长权限', data: null }
+    return
+  }
+  return next()
+}
+
+/**
+ * 要求店员或店长权限
+ * 支持角色: staff (店员) / owner (店长) / super_admin (超级管理员)
+ * 用于：交易记账等店员可操作的功能
+ */
+export function requireStaffOrOwner(ctx: Context, next: Next) {
+  const role = ctx.state.user?.role
+  const allowedRoles = ['staff', 'owner', 'super_admin']
+  if (!allowedRoles.includes(role)) {
+    ctx.status = 403
+    ctx.body = { code: 403, message: '需要员工权限', data: null }
     return
   }
   return next()

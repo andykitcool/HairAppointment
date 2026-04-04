@@ -153,10 +153,12 @@ async function adminLogin(ctx) {
             ctx.body = { code: 400, message: '密码错误', data: null };
             return;
         }
+        // 使用数据库中的真实角色
+        const adminRole = admin.role || 'owner';
         // 生成 JWT Token
         const token = auth_1.signJwt({
             user_id: admin._id.toString(),
-            role: 'super_admin',
+            role: adminRole,
             type: 'admin',
         });
         ctx.body = {
@@ -164,7 +166,7 @@ async function adminLogin(ctx) {
             message: 'ok',
             data: {
                 token,
-                role: 'super_admin',
+                role: adminRole,
                 real_name: admin.real_name,
             },
         };
@@ -706,16 +708,18 @@ async function handleWechatScanEvent(scene, openid) {
             loginQRStore.set(scene, loginData);
             return { success: false, message: '账号已被禁用' };
         }
+        // 使用数据库中的真实角色
+        const adminRole = admin.role || 'owner';
         // 生成JWT Token
         const token = auth_1.signJwt({
             user_id: admin._id.toString(),
-            role: 'super_admin',
+            role: adminRole,
             type: 'admin',
         });
         // 更新状态为成功
         loginData.status = 'success';
         loginData.token = token;
-        loginData.role = 'super_admin';
+        loginData.role = adminRole;
         loginData.real_name = admin.real_name || '';
         loginQRStore.set(scene, loginData);
         return { success: true, message: '登录成功' };

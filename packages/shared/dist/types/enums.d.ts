@@ -1,12 +1,24 @@
 /** 用户角色 */
 export declare enum UserRole {
     CUSTOMER = "customer",
+    PENDING_OWNER = "pending_owner",
     OWNER = "owner",
     STAFF = "staff"
+}
+/** 管理员角色 */
+export declare enum AdminRole {
+    SUPER_ADMIN = "super_admin",
+    OWNER = "owner"
+}
+/** 管理员账号类型 */
+export declare enum AdminType {
+    SYSTEM = "system",
+    MERCHANT = "merchant"
 }
 /** 商户状态 */
 export declare enum MerchantStatus {
     PENDING = "pending",
+    APPLYING = "applying",
     ACTIVE = "active",
     INACTIVE = "inactive",
     REJECTED = "rejected"

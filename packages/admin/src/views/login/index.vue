@@ -79,7 +79,8 @@ async function handleLogin() {
       const userData = {
         token: res.data.token,
         role: res.data.role,
-        realName: res.data.real_name
+        realName: res.data.real_name,
+        username: form.username
       }
       authStore.setUser(userData)
       ElMessage.success('登录成功')

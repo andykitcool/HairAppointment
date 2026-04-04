@@ -1,0 +1,9 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-04-04T09:56:45.037Z
+provider: 
+---
+
+开发调试在本地Docker部署环境:redis,mongo,npc,admin,api,admin是后端管理页面，api是后端服务，如果修改代码需要重新编译再重启docker服务

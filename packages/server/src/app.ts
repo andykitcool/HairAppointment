@@ -42,29 +42,45 @@ async function bootstrap() {
     await next()
   })
 
-  // 微信消息接收需要原始XML body
+  // 微信消息接收需要原始XML body（必须在koaBody之前，且不调用next让koaBody处理）
   app.use(async (ctx, next) => {
     if (ctx.path === '/api/wechat/message' && ctx.method === 'POST') {
       let rawBody = ''
       ctx.req.on('data', (chunk) => {
         rawBody += chunk
       })
-      ctx.req.on('end', () => {
-        ctx.request.body = rawBody
-      })
       // 等待数据接收完成
       await new Promise<void>((resolve) => {
-        ctx.req.on('end', resolve)
-        ctx.req.on('error', resolve)
+        ctx.req.on('end', () => {
+          ctx.request.body = rawBody
+          console.log('[WechatMessage] Raw body received:', rawBody.substring(0, 500))
+          resolve()
+        })
+        ctx.req.on('error', (err) => {
+          console.error('[WechatMessage] Error receiving body:', err)
+          resolve()
+        })
       })
+      // 继续执行后续中间件（包括路由）
+      await next()
+      return
     }
     await next()
   })
 
+  // koaBody 排除微信消息路径
   app.use(koaBody({
     multipart: true,
     jsonLimit: '10mb',
     formLimit: '10mb',
+    onError: (err, ctx) => {
+      // 微信消息路径的错误可以忽略
+      if (ctx.path === '/api/wechat/message') {
+        console.log('[WechatMessage] koaBody error ignored for wechat message')
+        return
+      }
+      throw err
+    },
   }))
 
   registerRoutes(app)

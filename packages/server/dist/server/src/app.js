@@ -37,7 +37,7 @@ async function bootstrap() {
         }
         await next();
     });
-    // 微信消息接收需要原始XML body
+    // 微信消息接收需要原始XML body（必须在koaBody之前，且不调用next让koaBody处理）
     app.use(async (ctx, next) => {
         if (ctx.path === '/api/wechat/message' && ctx.method === 'POST') {
             let rawBody = '';
@@ -47,10 +47,16 @@ async function bootstrap() {
             await new Promise((resolve) => {
                 ctx.req.on('end', () => {
                     ctx.request.body = rawBody;
+                    console.log('[WechatMessage] Raw body received:', rawBody.substring(0, 500));
                     resolve();
                 });
-                ctx.req.on('error', resolve);
+                ctx.req.on('error', (err) => {
+                    console.error('[WechatMessage] Error receiving body:', err);
+                    resolve();
+                });
             });
+            await next();
+            return;
         }
         await next();
     });
@@ -59,6 +65,13 @@ async function bootstrap() {
         multipart: true,
         jsonLimit: '10mb',
         formLimit: '10mb',
+        onError: (err, ctx) => {
+            if (ctx.path === '/api/wechat/message') {
+                console.log('[WechatMessage] koaBody error ignored for wechat message');
+                return;
+            }
+            throw err;
+        },
     }));
     index_js_2.registerRoutes(app);
     index_js_3.initCronJobs();

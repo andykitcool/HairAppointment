@@ -25,7 +25,8 @@ const UserSchema = new Schema<IUserDocument>({
   avatar_url: { type: String, required: true, default: '' },
   phone: { type: String, required: true, default: '' },
   real_name: { type: String },
-  role: { type: String, required: true, enum: ['customer', 'owner', 'staff'], default: 'customer' },
+  // role 扩展: customer(顾客) | pending_owner(申请中店长) | owner(店长) | staff(店员)
+  role: { type: String, required: true, enum: ['customer', 'pending_owner', 'owner', 'staff'], default: 'customer' },
   merchant_id: { type: String, index: true },
   customer_note: { type: String },
   merchant_note: { type: String },

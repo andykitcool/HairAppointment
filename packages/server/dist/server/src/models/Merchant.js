@@ -33,9 +33,9 @@ const MerchantSchema = new mongoose_1.Schema({
     status: { type: String, required: true, enum: ['pending', 'active', 'inactive', 'rejected'], default: 'pending' },
     description: { type: String },
     cover_image: { type: String },
-    owner_id: { type: String, required: true },
-    daily_counter: { type: Number, required: true, default: 0 },
-    counter_date: { type: String, required: true, default: '' },
+    owner_id: { type: String, default: '' },
+    daily_counter: { type: Number, default: 0 },
+    counter_date: { type: String, default: '' },
     extended_hours: [{
             start_date: String,
             end_date: String,
@@ -73,9 +73,11 @@ const MerchantSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });
-MerchantSchema.pre('save', function (next) {
+MerchantSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 exports.MerchantModel = mongoose_1.default.model('Merchant', MerchantSchema);
 //# sourceMappingURL=Merchant.js.map

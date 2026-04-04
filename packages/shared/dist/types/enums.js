@@ -2,13 +2,27 @@
 export var UserRole;
 (function (UserRole) {
     UserRole["CUSTOMER"] = "customer";
+    UserRole["PENDING_OWNER"] = "pending_owner";
     UserRole["OWNER"] = "owner";
     UserRole["STAFF"] = "staff";
 })(UserRole || (UserRole = {}));
+/** 管理员角色 */
+export var AdminRole;
+(function (AdminRole) {
+    AdminRole["SUPER_ADMIN"] = "super_admin";
+    AdminRole["OWNER"] = "owner";
+})(AdminRole || (AdminRole = {}));
+/** 管理员账号类型 */
+export var AdminType;
+(function (AdminType) {
+    AdminType["SYSTEM"] = "system";
+    AdminType["MERCHANT"] = "merchant";
+})(AdminType || (AdminType = {}));
 /** 商户状态 */
 export var MerchantStatus;
 (function (MerchantStatus) {
     MerchantStatus["PENDING"] = "pending";
+    MerchantStatus["APPLYING"] = "applying";
     MerchantStatus["ACTIVE"] = "active";
     MerchantStatus["INACTIVE"] = "inactive";
     MerchantStatus["REJECTED"] = "rejected";

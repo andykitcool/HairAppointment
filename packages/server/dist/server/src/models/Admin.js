@@ -29,6 +29,9 @@ const AdminSchema = new mongoose_1.Schema({
     wx_openid: { type: String, default: '' },
     wx_unionid: { type: String, default: '' },
     is_active: { type: Boolean, required: true, default: true },
+    role: { type: String, required: true, enum: ['super_admin', 'owner'], default: 'owner' },
+    merchant_id: { type: String, index: true },
+    type: { type: String, required: true, enum: ['system', 'merchant'], default: 'merchant' },
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });

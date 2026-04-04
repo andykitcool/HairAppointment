@@ -1,12 +1,15 @@
 import Router from 'koa-router'
 import * as serviceController from '../controllers/service'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, requireOwner } from '../middleware/auth'
 
 const router = new Router({ prefix: '/api/services' })
 
+// 查询服务列表 - 仅需登录（顾客也需要查看服务）
 router.get('/', authMiddleware, serviceController.getServices)
-router.post('/', authMiddleware, serviceController.createService)
-router.put('/:id', authMiddleware, serviceController.updateService)
-router.delete('/:id', authMiddleware, serviceController.deleteService)
+
+// 服务管理（增删改）- 只有店长和超管可以操作，店员不能操作
+router.post('/', authMiddleware, requireOwner, serviceController.createService)
+router.put('/:id', authMiddleware, requireOwner, serviceController.updateService)
+router.delete('/:id', authMiddleware, requireOwner, serviceController.deleteService)
 
 export default router

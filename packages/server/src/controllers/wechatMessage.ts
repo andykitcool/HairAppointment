@@ -43,8 +43,11 @@ export async function receiveWechatMessage(ctx: Context) {
     nonce: string
   }
 
+  console.log('[WechatMessage] Received message, query:', { signature, timestamp, nonce })
+
   const config = await getActiveServiceConfig()
   if (!config || !config.token) {
+    console.log('[WechatMessage] No service config or token found')
     ctx.body = 'success' // 微信要求返回success
     return
   }
@@ -53,44 +56,68 @@ export async function receiveWechatMessage(ctx: Context) {
   const tmpStr = [config.token, timestamp, nonce].sort().join('')
   const hash = crypto.createHash('sha1').update(tmpStr).digest('hex')
 
+  console.log('[WechatMessage] Signature check:', { expected: hash, received: signature, match: hash === signature })
+
   if (hash !== signature) {
+    console.log('[WechatMessage] Signature verification failed')
     ctx.body = 'success'
     return
   }
 
   // 解析XML消息体
   const xmlBody = ctx.request.body as string
+  console.log('[WechatMessage] XML Body:', xmlBody)
+
   if (!xmlBody) {
+    console.log('[WechatMessage] Empty body')
     ctx.body = 'success'
     return
   }
 
   try {
-    // 简单解析XML（生产环境建议使用xml2js库）
+    // 解析XML字段
     const msgType = getXmlValue(xmlBody, 'MsgType')
     const fromUser = getXmlValue(xmlBody, 'FromUserName')
+    const toUser = getXmlValue(xmlBody, 'ToUserName')
     const event = getXmlValue(xmlBody, 'Event')
     const eventKey = getXmlValue(xmlBody, 'EventKey')
+    const msgId = getXmlValue(xmlBody, 'MsgId')
 
-    console.log(`[WechatMessage] Type: ${msgType}, Event: ${event}, From: ${fromUser}, Key: ${eventKey}`)
+    console.log(`[WechatMessage] Parsed:`, {
+      msgType,
+      fromUser,
+      toUser,
+      event,
+      eventKey,
+      msgId,
+    })
 
     // 处理扫码事件
     if (msgType === 'event' && (event === 'SCAN' || event === 'subscribe')) {
       // EventKey 格式为: qrscene_scene值 或 scene值
       let scene = eventKey
-      if (event === 'subscribe' && scene.startsWith('qrscene_')) {
+      console.log(`[WechatMessage] Processing scan event, raw scene: ${scene}`)
+
+      if (event === 'subscribe' && scene && scene.startsWith('qrscene_')) {
         scene = scene.substring(8) // 去掉 qrscene_ 前缀
+        console.log(`[WechatMessage] Removed qrscene_ prefix, scene: ${scene}`)
       }
 
       if (scene && scene.startsWith('login_')) {
         // 这是登录扫码
+        console.log(`[WechatMessage] Detected login scene: ${scene}`)
         const result = await handleWechatScanEvent(scene, fromUser)
         console.log(`[WechatScan] Login result:`, result)
       } else if (scene && scene.startsWith('bind_')) {
         // 这是绑定扫码
+        console.log(`[WechatMessage] Detected bind scene: ${scene}`)
         const result = await handleWechatBindEvent(scene, fromUser)
         console.log(`[WechatScan] Bind result:`, result)
+      } else {
+        console.log(`[WechatMessage] Unknown scene format: ${scene}`)
       }
+    } else {
+      console.log(`[WechatMessage] Not a scan event. msgType=${msgType}, event=${event}`)
     }
 
     ctx.body = 'success'
@@ -101,10 +128,28 @@ export async function receiveWechatMessage(ctx: Context) {
 }
 
 /**
- * 从XML中提取值（简单实现）
+ * 从XML中提取值（增强版，支持CDATA和普通标签）
  */
 function getXmlValue(xml: string, tag: string): string {
-  const regex = new RegExp(`<${tag}><!\\[CDATA\\[(.*?)\\]\\]></${tag}>|<${tag}>(.*?)</${tag}>`, 'i')
-  const match = xml.match(regex)
-  return match ? (match[1] || match[2] || '') : ''
+  // 尝试匹配 CDATA 格式: <tag><![CDATA[...]]></tag>
+  const cdataRegex = new RegExp(`<${tag}>\\s*<!\\[CDATA\\[(.*?)\\]\\]>\\s*</${tag}>`, 'is')
+  const cdataMatch = xml.match(cdataRegex)
+  if (cdataMatch && cdataMatch[1]) {
+    return cdataMatch[1].trim()
+  }
+
+  // 尝试匹配普通格式: <tag>...</tag>
+  const normalRegex = new RegExp(`<${tag}>(.*?)</${tag}>`, 'is')
+  const normalMatch = xml.match(normalRegex)
+  if (normalMatch && normalMatch[1]) {
+    return normalMatch[1].trim()
+  }
+
+  // 尝试匹配自闭合标签: <tag />
+  const selfCloseRegex = new RegExp(`<${tag}\\s*/>`, 'i')
+  if (selfCloseRegex.test(xml)) {
+    return ''
+  }
+
+  return ''
 }

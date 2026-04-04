@@ -6,7 +6,8 @@ export interface IMerchantDocument extends Document {
   address?: string
   phone: string
   business_hours: { start: string; end: string }
-  status: string
+  // status 扩展: pending(待审核) | applying(申请中) | active(正常) | inactive(暂停) | rejected(已拒绝)
+  status: 'pending' | 'applying' | 'active' | 'inactive' | 'rejected'
   description?: string
   cover_image?: string
   owner_id: string
@@ -17,6 +18,16 @@ export interface IMerchantDocument extends Document {
     end_date: string
     extended_end: string
   }>
+  // 新增：入驻申请信息
+  application_info?: {
+    applicant_name: string
+    applicant_phone: string
+    applicant_wx_openid: string
+    apply_time: Date
+    review_note?: string
+    review_time?: Date
+    reviewer_id?: string
+  }
   coze_config?: {
     bot_id: string
     api_key: string
@@ -59,12 +70,21 @@ const MerchantSchema = new Schema<IMerchantDocument>({
     start: { type: String, required: true, default: '09:00' },
     end: { type: String, required: true, default: '21:00' },
   },
-  status: { type: String, required: true, enum: ['pending', 'active', 'inactive', 'rejected'], default: 'pending' },
+  status: { type: String, required: true, enum: ['pending', 'applying', 'active', 'inactive', 'rejected'], default: 'pending' },
   description: { type: String },
   cover_image: { type: String },
-  owner_id: { type: String, required: true },
-  daily_counter: { type: Number, required: true, default: 0 },
-  counter_date: { type: String, required: true, default: '' },
+  owner_id: { type: String, default: '' },
+  application_info: {
+    applicant_name: { type: String },
+    applicant_phone: { type: String },
+    applicant_wx_openid: { type: String },
+    apply_time: { type: Date },
+    review_note: { type: String },
+    review_time: { type: Date },
+    reviewer_id: { type: String },
+  },
+  daily_counter: { type: Number, default: 0 },
+  counter_date: { type: String, default: '' },
   extended_hours: [{
     start_date: String,
     end_date: String,

@@ -4,6 +4,7 @@
       <div class="logo">
         <h2>美发预约</h2>
         <p>管理后台</p>
+        <p v-if="authStore.roleDisplayName" class="role-tag">{{ authStore.roleDisplayName }}</p>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -12,56 +13,83 @@
         text-color="#ffffffa6"
         active-text-color="#fff"
       >
-        <el-menu-item index="/dashboard">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>数据总览</span>
-        </el-menu-item>
-        <el-menu-item index="/appointments">
-          <el-icon><Calendar /></el-icon>
-          <span>预约管理</span>
-        </el-menu-item>
-        <el-menu-item index="/transactions">
-          <el-icon><Wallet /></el-icon>
-          <span>记账管理</span>
-        </el-menu-item>
-        <el-menu-item index="/services">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>服务管理</span>
-        </el-menu-item>
-        <el-menu-item index="/customers">
-          <el-icon><User /></el-icon>
-          <span>顾客管理</span>
-        </el-menu-item>
-        <el-menu-item index="/schedule">
-          <el-icon><Clock /></el-icon>
-          <span>营业设置</span>
-        </el-menu-item>
-        <el-menu-item index="/stats">
-          <el-icon><TrendCharts /></el-icon>
-          <span>营收统计</span>
-        </el-menu-item>
+        <!-- 超管菜单 -->
+        <template v-if="authStore.isSuperAdmin">
+          <el-menu-item index="/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>数据总览</span>
+          </el-menu-item>
 
-        <el-sub-menu index="settings">
-          <template #title>
-            <el-icon><Setting /></el-icon>
-            <span>系统设置</span>
-          </template>
-          <el-menu-item index="/settings/profile">个人设置</el-menu-item>
-          <el-menu-item index="/settings/coze">COZE 配置</el-menu-item>
-          <el-menu-item index="/settings/feishu">飞书配置</el-menu-item>
-          <el-menu-item index="/settings/sync">同步配置</el-menu-item>
-          <el-menu-item index="/settings/notify">通知配置</el-menu-item>
-          <el-menu-item index="/settings/wechat">微信配置</el-menu-item>
-        </el-sub-menu>
+          <el-sub-menu index="admin">
+            <template #title>
+              <el-icon><Shop /></el-icon>
+              <span>门店管理</span>
+            </template>
+            <el-menu-item index="/admin/merchants">门店列表</el-menu-item>
+            <el-menu-item index="/admin/applications">入驻审核</el-menu-item>
+          </el-sub-menu>
 
-        <el-sub-menu v-if="isAdmin" index="admin">
-          <template #title>
-            <el-icon><Tools /></el-icon>
-            <span>超管功能</span>
-          </template>
-          <el-menu-item index="/admin/merchants">门店管理</el-menu-item>
-          <el-menu-item index="/admin/applications">入驻审核</el-menu-item>
-        </el-sub-menu>
+          <el-sub-menu index="settings">
+            <template #title>
+              <el-icon><Setting /></el-icon>
+              <span>系统设置</span>
+            </template>
+            <el-menu-item index="/settings/profile">个人设置</el-menu-item>
+            <el-menu-item index="/settings/wechat">微信配置</el-menu-item>
+          </el-sub-menu>
+        </template>
+
+        <!-- 门店管理员菜单 -->
+        <template v-else-if="authStore.isMerchantAdmin">
+          <el-menu-item index="/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>数据总览</span>
+          </el-menu-item>
+          <el-menu-item index="/appointments">
+            <el-icon><Calendar /></el-icon>
+            <span>预约管理</span>
+          </el-menu-item>
+          <el-menu-item index="/transactions">
+            <el-icon><Wallet /></el-icon>
+            <span>记账管理</span>
+          </el-menu-item>
+          <el-menu-item index="/services">
+            <el-icon><Collection /></el-icon>
+            <span>服务管理</span>
+          </el-menu-item>
+          <el-menu-item index="/customers">
+            <el-icon><User /></el-icon>
+            <span>顾客管理</span>
+          </el-menu-item>
+          <el-menu-item index="/schedule">
+            <el-icon><Clock /></el-icon>
+            <span>营业设置</span>
+          </el-menu-item>
+          <el-menu-item index="/stats">
+            <el-icon><TrendCharts /></el-icon>
+            <span>营收统计</span>
+          </el-menu-item>
+
+          <el-sub-menu index="settings">
+            <template #title>
+              <el-icon><Setting /></el-icon>
+              <span>系统设置</span>
+            </template>
+            <el-menu-item index="/settings/profile">个人设置</el-menu-item>
+            <el-menu-item index="/settings/coze">COZE 配置</el-menu-item>
+            <el-menu-item index="/settings/feishu">飞书配置</el-menu-item>
+            <el-menu-item index="/settings/sync">同步配置</el-menu-item>
+            <el-menu-item index="/settings/notify">通知配置</el-menu-item>
+          </el-sub-menu>
+        </template>
+
+        <!-- 默认菜单（未识别角色） -->
+        <template v-else>
+          <el-menu-item index="/dashboard">
+            <el-icon><DataAnalysis /></el-icon>
+            <span>数据总览</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </el-aside>
 
@@ -100,7 +128,6 @@ const authStore = useAuthStore()
 
 const activeMenu = computed(() => route.path)
 const username = computed(() => authStore.user.realName || authStore.user.username || '管理员')
-const isAdmin = computed(() => authStore.isAdmin())
 
 function handleLogout() {
   authStore.logout()
@@ -120,7 +147,8 @@ onMounted(() => {
     // 恢复 store 状态
     try {
       const user = JSON.parse(storedUser)
-      if (!authStore.isLoggedIn) {
+      // 如果 store 中没有用户信息，或者用户信息不完整，重新设置
+      if (!authStore.isLoggedIn || !authStore.user?.role) {
         authStore.setUser(user)
       }
     } catch (e) {
@@ -157,6 +185,16 @@ onMounted(() => {
   font-size: 12px;
   color: #ffffffa6;
   margin: 0;
+}
+
+.role-tag {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  background: rgba(24, 144, 255, 0.2);
+  color: #1890ff;
+  border-radius: 4px;
+  font-size: 11px;
 }
 
 .header {

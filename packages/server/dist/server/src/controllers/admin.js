@@ -86,6 +86,8 @@ async function createMerchant(ctx) {
                 username: owner_name,
                 password_hash: passwordHash,
                 real_name: owner_name,
+                role: 'owner',
+                type: 'merchant',
                 is_active: true,
             });
             await models_1.MerchantModel.updateOne({ merchant_id: merchant.merchant_id }, { owner_id: admin._id.toString() });

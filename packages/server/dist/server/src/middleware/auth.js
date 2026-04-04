@@ -86,11 +86,12 @@ async function authMiddleware(ctx, next) {
 }
 exports.authMiddleware = authMiddleware;
 /**
- * 要求店长或超管权限
+ * 要求店长或超管权限（店员不允许）
  */
 function requireOwner(ctx, next) {
     const role = ctx.state.user?.role;
-    if (role !== 'owner' && role !== 'staff') {
+    const allowedRoles = ['owner', 'super_admin'];
+    if (!allowedRoles.includes(role)) {
         ctx.status = 403;
         ctx.body = { code: 403, message: '需要店长权限', data: null };
         return;
@@ -98,6 +99,22 @@ function requireOwner(ctx, next) {
     return next();
 }
 exports.requireOwner = requireOwner;
+
+/**
+ * 要求店员或店长权限
+ * 用于：交易记账等店员可操作的功能
+ */
+function requireStaffOrOwner(ctx, next) {
+    const role = ctx.state.user?.role;
+    const allowedRoles = ['staff', 'owner', 'super_admin'];
+    if (!allowedRoles.includes(role)) {
+        ctx.status = 403;
+        ctx.body = { code: 403, message: '需要员工权限', data: null };
+        return;
+    }
+    return next();
+}
+exports.requireStaffOrOwner = requireStaffOrOwner;
 /**
  * COZE API Key 认证中间件
  */

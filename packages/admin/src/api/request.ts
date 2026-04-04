@@ -107,7 +107,16 @@ export const notificationApi = {
 }
 
 export const adminApi = {
+  // 门店管理
   getMerchants: (params?: any) => http.get('/admin/merchants', { params }),
   addMerchant: (data: any) => http.post('/admin/merchants', data),
   updateMerchantStatus: (id: string, status: string) => http.put(`/admin/merchants/${id}/status`, { status }),
+  resetMerchantAdminPassword: (id: string) => http.post(`/admin/merchants/${id}/reset-password`),
+
+  // 入驻审核
+  getApplications: (params?: any) => http.get('/admin/applications', { params }),
+  reviewApplication: (id: string, action: 'approve' | 'reject', note?: string) => http.post(`/admin/merchants/${id}/review`, { action, note }),
+
+  // 平台统计
+  getPlatformStats: () => http.get('/admin/stats'),
 }
