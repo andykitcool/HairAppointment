@@ -110,6 +110,8 @@ export const adminApi = {
   // 门店管理
   getMerchants: (params?: any) => http.get('/admin/merchants', { params }),
   addMerchant: (data: any) => http.post('/admin/merchants', data),
+  updateMerchant: (id: string, data: any) => http.put(`/admin/merchants/${id}`, data),
+  deleteMerchant: (id: string) => http.delete(`/admin/merchants/${id}`),
   updateMerchantStatus: (id: string, status: string) => http.put(`/admin/merchants/${id}/status`, { status }),
   resetMerchantAdminPassword: (id: string) => http.post(`/admin/merchants/${id}/reset-password`),
 

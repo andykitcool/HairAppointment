@@ -29,6 +29,8 @@ const router = new koa_router_1.default({ prefix: '/api/admin' });
 // Web 后台超管专用（session 认证）
 router.get('/merchants', session_1.sessionAuthMiddleware, adminController.getMerchants);
 router.post('/merchants', session_1.sessionAuthMiddleware, adminController.createMerchant);
+router.put('/merchants/:id', session_1.sessionAuthMiddleware, adminController.updateMerchant);
+router.delete('/merchants/:id', session_1.sessionAuthMiddleware, adminController.deleteMerchant);
 router.put('/merchants/:id/status', session_1.sessionAuthMiddleware, adminController.updateMerchantStatus);
 router.get('/stats', session_1.sessionAuthMiddleware, adminController.getPlatformStats);
 router.get('/applications', session_1.sessionAuthMiddleware, adminController.getApplications);

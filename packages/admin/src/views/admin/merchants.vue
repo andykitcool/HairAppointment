@@ -49,25 +49,28 @@
         <el-table-column prop="create_time" label="创建时间" width="160">
           <template #default="{ row }">{{ row.create_time ? new Date(row.create_time).toLocaleString() : '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
+            <!-- 编辑按钮 - 所有状态都显示 -->
+            <el-button type="primary" size="small" plain @click="handleEdit(row)">编辑</el-button>
             <!-- 申请中/待审核状态 -->
             <template v-if="row.status === 'applying' || row.status === 'pending'">
               <el-button type="success" size="small" @click="approve(row)">通过</el-button>
               <el-button type="danger" size="small" plain @click="reject(row)">拒绝</el-button>
             </template>
-            <!-- 营业中状态 -->
+            <!-- 营业中状态 - 不能删除，只能停用 -->
             <template v-else-if="row.status === 'active'">
               <el-button type="warning" size="small" plain @click="updateStatus(row, 'inactive')">停用</el-button>
-              <el-button type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
             </template>
-            <!-- 已停用状态 -->
+            <!-- 已停用状态 - 可以启用或删除 -->
             <template v-else-if="row.status === 'inactive'">
               <el-button type="success" size="small" @click="updateStatus(row, 'active')">启用</el-button>
-              <el-button type="primary" size="small" @click="resetPassword(row)">重置密码</el-button>
+              <el-button type="danger" size="small" plain @click="handleDelete(row)">删除</el-button>
             </template>
-            <!-- 已拒绝状态 -->
-            <span v-else style="color: #909399; font-size: 13px">已拒绝</span>
+            <!-- 已拒绝状态 - 只能删除 -->
+            <template v-else-if="row.status === 'rejected'">
+              <el-button type="danger" size="small" plain @click="handleDelete(row)">删除</el-button>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -158,6 +161,41 @@
         <el-button type="danger" @click="confirmReject">确认拒绝</el-button>
       </template>
     </el-dialog>
+
+    <!-- 编辑门店弹窗 -->
+    <el-dialog v-model="showEditDialog" title="编辑门店" width="500px" :close-on-click-modal="false">
+      <el-form :model="editForm" ref="editFormRef" :rules="editRules" label-width="100px">
+        <el-form-item label="门店名称" prop="name">
+          <el-input v-model="editForm.name" placeholder="请输入门店名称" />
+        </el-form-item>
+        <el-form-item label="联系电话" prop="phone">
+          <el-input v-model="editForm.phone" placeholder="请输入门店联系电话" />
+        </el-form-item>
+        <el-form-item label="门店地址" prop="address">
+          <el-input v-model="editForm.address" placeholder="请输入门店地址" />
+        </el-form-item>
+        <el-form-item label="营业时间" required>
+          <el-col :span="11">
+            <el-form-item prop="business_hours_start">
+              <el-time-picker v-model="editForm.business_hours_start" placeholder="开始时间" format="HH:mm" value-format="HH:mm" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="2" style="text-align: center;">-</el-col>
+          <el-col :span="11">
+            <el-form-item prop="business_hours_end">
+              <el-time-picker v-model="editForm.business_hours_end" placeholder="结束时间" format="HH:mm" value-format="HH:mm" style="width: 100%;" />
+            </el-form-item>
+          </el-col>
+        </el-form-item>
+        <el-form-item label="门店简介" prop="description">
+          <el-input v-model="editForm.description" type="textarea" rows="2" placeholder="请输入门店简介（可选）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" :loading="editSubmitting" @click="handleEditSubmit">确认修改</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -210,6 +248,27 @@ const showRejectDialog = ref(false)
 const rejectForm = ref({ note: '' })
 const currentRejectRow = ref<any>(null)
 
+// 编辑门店
+const showEditDialog = ref(false)
+const editFormRef = ref()
+const editSubmitting = ref(false)
+const currentEditRow = ref<any>(null)
+const editForm = reactive({
+  name: '',
+  phone: '',
+  address: '',
+  business_hours_start: '09:00',
+  business_hours_end: '21:00',
+  description: ''
+})
+const editRules = {
+  name: [{ required: true, message: '请输入门店名称', trigger: 'blur' }],
+  phone: [{ required: true, message: '请输入联系电话', trigger: 'blur' }],
+  address: [{ required: true, message: '请输入门店地址', trigger: 'blur' }],
+  business_hours_start: [{ required: true, message: '请选择开始时间', trigger: 'change' }],
+  business_hours_end: [{ required: true, message: '请选择结束时间', trigger: 'change' }]
+}
+
 const statusLabel = (s: string) => ({
   applying: '申请中',
   pending: '待审核',
@@ -233,9 +292,10 @@ async function loadData() {
     if (filterStatus.value) {
       params.status = filterStatus.value
     }
-    const res = await adminApi.getMerchants(params) as any
-    tableData.value = res?.list || (Array.isArray(res) ? res : [])
-    total.value = res?.total || tableData.value.length
+    const res: any = await adminApi.getMerchants(params)
+    const data = res?.data || res
+    tableData.value = data?.list || (Array.isArray(data) ? data : [])
+    total.value = data?.total || tableData.value.length
   } catch (e) { console.error(e) }
   finally { loading.value = false }
 }
@@ -311,7 +371,7 @@ async function updateStatus(row: any, status: string) {
   const label = status === 'active' ? '启用' : '停用'
   await ElMessageBox.confirm(`${label}门店「${row.name}」？`, '确认')
   try {
-    await adminApi.updateMerchantStatus(row._id, status)
+    await adminApi.updateMerchantStatus(row.merchant_id, status)
     ElMessage.success(`${label}成功`)
     await loadData()
   } catch (e: any) {
@@ -328,6 +388,59 @@ async function resetPassword(row: any) {
     showResetDialog.value = true
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '操作失败')
+  }
+}
+
+// 编辑门店
+function handleEdit(row: any) {
+  currentEditRow.value = row
+  editForm.name = row.name || ''
+  editForm.phone = row.phone || ''
+  editForm.address = row.address || ''
+  editForm.business_hours_start = row.business_hours?.start || '09:00'
+  editForm.business_hours_end = row.business_hours?.end || '21:00'
+  editForm.description = row.description || ''
+  showEditDialog.value = true
+}
+
+async function handleEditSubmit() {
+  await editFormRef.value.validate()
+  editSubmitting.value = true
+  try {
+    const data = {
+      name: editForm.name,
+      phone: editForm.phone,
+      address: editForm.address,
+      description: editForm.description,
+      business_hours: {
+        start: editForm.business_hours_start,
+        end: editForm.business_hours_end
+      }
+    }
+    await adminApi.updateMerchant(currentEditRow.value.merchant_id, data)
+    ElMessage.success('门店信息更新成功')
+    showEditDialog.value = false
+    await loadData()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '更新失败')
+  } finally {
+    editSubmitting.value = false
+  }
+}
+
+// 删除门店
+async function handleDelete(row: any) {
+  await ElMessageBox.confirm(
+    `确定删除门店「${row.name}」？此操作将删除该门店的所有数据（服务、员工、预约记录等），不可恢复！`,
+    '危险操作确认',
+    { type: 'warning', confirmButtonClass: 'el-button--danger' }
+  )
+  try {
+    await adminApi.deleteMerchant(row.merchant_id)
+    ElMessage.success('门店删除成功')
+    await loadData()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
   }
 }
 

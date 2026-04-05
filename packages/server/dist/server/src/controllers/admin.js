@@ -50,12 +50,20 @@ exports.getMerchants = getMerchants;
  * 手动添加门店
  */
 async function createMerchant(ctx) {
-    const { name, phone, address, description, owner_name, owner_password } = ctx.request.body;
+    const { name, phone, address, description, owner_name, owner_password, owner_phone } = ctx.request.body;
     if (!name || !phone) {
         ctx.body = { code: 400, message: '缺少必填字段', data: null };
         return;
     }
     try {
+        // 检查店长电话是否已存在
+        if (owner_phone) {
+            const existingMerchant = await models_1.MerchantModel.findOne({ phone: owner_phone });
+            if (existingMerchant) {
+                ctx.body = { code: 400, message: '该店长电话已绑定其他门店', data: null };
+                return;
+            }
+        }
         // 创建商户
         const merchant = await models_1.MerchantModel.create({
             merchant_id: index_1.generateShortId('M'),
@@ -80,6 +88,7 @@ async function createMerchant(ctx) {
             });
         }
         // 如果有店长信息，创建 admin 账号和 user 记录
+        let adminAccount = null;
         if (owner_name && owner_password) {
             const passwordHash = await bcryptjs_1.default.hash(owner_password, 10);
             const admin = await models_1.AdminModel.create({
@@ -91,8 +100,12 @@ async function createMerchant(ctx) {
                 is_active: true,
             });
             await models_1.MerchantModel.updateOne({ merchant_id: merchant.merchant_id }, { owner_id: admin._id.toString() });
+            adminAccount = {
+                username: owner_name,
+                password: owner_password
+            };
         }
-        ctx.body = { code: 0, message: '创建成功', data: { merchant_id: merchant.merchant_id } };
+        ctx.body = { code: 0, message: '创建成功', data: { merchant_id: merchant.merchant_id, admin_account: adminAccount } };
     }
     catch (err) {
         ctx.status = 500;
@@ -134,6 +147,64 @@ async function updateMerchantStatus(ctx) {
     ctx.body = { code: 0, message: '更新成功', data: null };
 }
 exports.updateMerchantStatus = updateMerchantStatus;
+/**
+ * 更新门店信息
+ */
+async function updateMerchant(ctx) {
+    const { id } = ctx.params;
+    const { name, phone, address, description, business_hours } = ctx.request.body;
+    try {
+        const updateData = {};
+        if (name) updateData.name = name;
+        if (phone) updateData.phone = phone;
+        if (address !== undefined) updateData.address = address;
+        if (description !== undefined) updateData.description = description;
+        if (business_hours) updateData.business_hours = business_hours;
+        await models_1.MerchantModel.updateOne({ merchant_id: id }, updateData);
+        ctx.body = { code: 0, message: '更新成功', data: null };
+    }
+    catch (err) {
+        ctx.status = 500;
+        ctx.body = { code: 500, message: err.message, data: null };
+    }
+}
+exports.updateMerchant = updateMerchant;
+/**
+ * 删除门店
+ */
+async function deleteMerchant(ctx) {
+    const { id } = ctx.params;
+    try {
+        // 检查门店是否存在
+        const merchant = await models_1.MerchantModel.findOne({ merchant_id: id });
+        if (!merchant) {
+            ctx.body = { code: 404, message: '门店不存在', data: null };
+            return;
+        }
+        // 只有已停用或已拒绝的门店可以删除
+        if (merchant.status !== 'inactive' && merchant.status !== 'rejected') {
+            ctx.body = { code: 400, message: '只有已停用或已拒绝的门店可以删除', data: null };
+            return;
+        }
+        // 删除关联数据
+        await models_1.ServiceModel.deleteMany({ merchant_id: id });
+        await models_1.StaffModel.deleteMany({ merchant_id: id });
+        await models_1.AppointmentModel.deleteMany({ merchant_id: id });
+        await models_1.TransactionModel.deleteMany({ merchant_id: id });
+        // 删除门店
+        await models_1.MerchantModel.deleteOne({ merchant_id: id });
+        // 删除关联的管理员账号
+        if (merchant.owner_id) {
+            await models_1.AdminModel.deleteOne({ _id: merchant.owner_id });
+        }
+        ctx.body = { code: 0, message: '删除成功', data: null };
+    }
+    catch (err) {
+        ctx.status = 500;
+        ctx.body = { code: 500, message: err.message, data: null };
+    }
+}
+exports.deleteMerchant = deleteMerchant;
 /**
  * 平台级统计
  */

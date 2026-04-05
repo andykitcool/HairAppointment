@@ -49,9 +49,11 @@ const AppointmentSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now, index: true },
     update_time: { type: Date, default: Date.now },
 });
-AppointmentSchema.pre('save', function (next) {
+AppointmentSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 // 复合索引：按商户+日期+状态查询
 AppointmentSchema.index({ merchant_id: 1, date: 1, status: 1 });

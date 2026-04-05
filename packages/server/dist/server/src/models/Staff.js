@@ -34,9 +34,11 @@ const StaffSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });
-StaffSchema.pre('save', function (next) {
+StaffSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 exports.StaffModel = mongoose_1.default.model('Staff', StaffSchema);
 //# sourceMappingURL=Staff.js.map

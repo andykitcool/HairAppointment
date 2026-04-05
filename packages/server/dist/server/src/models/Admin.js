@@ -35,9 +35,11 @@ const AdminSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });
-AdminSchema.pre('save', function (next) {
+AdminSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 exports.AdminModel = mongoose_1.default.model('Admin', AdminSchema);
 //# sourceMappingURL=Admin.js.map

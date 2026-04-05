@@ -38,9 +38,11 @@ const UserSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });
-UserSchema.pre('save', function (next) {
+UserSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 exports.UserModel = mongoose_1.default.model('User', UserSchema);
 //# sourceMappingURL=User.js.map

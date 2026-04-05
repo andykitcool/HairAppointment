@@ -43,9 +43,11 @@ const TransactionSchema = new mongoose_1.Schema({
     create_time: { type: Date, default: Date.now },
     update_time: { type: Date, default: Date.now },
 });
-TransactionSchema.pre('save', function (next) {
+TransactionSchema.pre('save', function(next) {
     this.update_time = new Date();
-    next();
+    if (typeof next === 'function') {
+        next();
+    }
 });
 TransactionSchema.index({ merchant_id: 1, transaction_date: 1 });
 exports.TransactionModel = mongoose_1.default.model('Transaction', TransactionSchema);
