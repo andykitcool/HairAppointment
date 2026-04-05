@@ -1,0 +1,239 @@
+
+.container.data-v-f97f9319 {
+  min-height: 100vh;
+  background: var(--color-bg, #F5F5F5);
+}
+
+/* 头部 */
+.profile-header.data-v-f97f9319 {
+  background: #fff;
+  padding: 60rpx 40rpx 40rpx;
+  display: flex;
+  align-items: center;
+}
+.avatar-wrapper.data-v-f97f9319 {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #F0F0F0;
+  margin-right: 30rpx;
+  position: relative;
+  flex-shrink: 0;
+}
+.avatar.data-v-f97f9319 {
+  width: 100%;
+  height: 100%;
+}
+.avatar-default.data-v-f97f9319 {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.avatar-text.data-v-f97f9319 {
+  font-size: 44rpx;
+  font-weight: 700;
+  color: #fff;
+}
+.login-badge.data-v-f97f9319 {
+  position: absolute;
+  bottom: -4rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 16rpx;
+  padding: 2rpx 12rpx;
+}
+.login-badge-text.data-v-f97f9319 {
+  font-size: 18rpx;
+  color: #fff;
+}
+.user-info.data-v-f97f9319 {
+  flex: 1;
+  min-width: 0;
+}
+.nickname.data-v-f97f9319 {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  display: block;
+  margin-bottom: 8rpx;
+}
+.phone.data-v-f97f9319 {
+  font-size: 26rpx;
+  color: #999;
+  display: block;
+  margin-bottom: 8rpx;
+}
+.role-tag.data-v-f97f9319 {
+  display: inline-block;
+  font-size: 20rpx;
+  padding: 4rpx 16rpx;
+  background: #000;
+  color: #fff;
+  border-radius: 6rpx;
+  font-weight: 600;
+}
+
+/* 统计卡片 */
+.stats-card.data-v-f97f9319 {
+  display: flex;
+  background: #fff;
+  margin: 20rpx 30rpx;
+  border-radius: 20rpx;
+  padding: 30rpx 0;
+}
+.stat-item.data-v-f97f9319 {
+  flex: 1;
+  text-align: center;
+}
+.stat-value.data-v-f97f9319 {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  display: block;
+  margin-bottom: 8rpx;
+}
+.stat-label.data-v-f97f9319 {
+  font-size: 24rpx;
+  color: #999;
+}
+.stat-divider.data-v-f97f9319 {
+  width: 1rpx;
+  background: #F0F0F0;
+}
+
+/* 菜单 */
+.menu-section.data-v-f97f9319 {
+  padding: 0 30rpx;
+}
+.menu-group.data-v-f97f9319 {
+  background: #fff;
+  border-radius: 20rpx;
+  margin-bottom: 20rpx;
+  overflow: hidden;
+}
+.menu-item.data-v-f97f9319 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 28rpx 30rpx;
+  border-bottom: 1rpx solid #F5F5F5;
+}
+.menu-item.data-v-f97f9319:last-child {
+  border-bottom: none;
+}
+.menu-left.data-v-f97f9319 {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+.menu-icon.data-v-f97f9319 {
+  font-size: 32rpx;
+}
+.menu-text.data-v-f97f9319 {
+  font-size: 28rpx;
+  color: #1A1A1A;
+}
+.menu-desc.data-v-f97f9319 {
+  font-size: 24rpx;
+  color: #999;
+}
+.menu-arrow.data-v-f97f9319 {
+  font-size: 32rpx;
+  color: #CCC;
+  font-weight: 300;
+}
+
+/* 退出登录 */
+.logout-section.data-v-f97f9319 {
+  padding: 40rpx 30rpx 0;
+}
+.btn-logout.data-v-f97f9319 {
+  background: #fff;
+  color: #FA5151;
+  border: none;
+  border-radius: 20rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+}
+.btn-logout.data-v-f97f9319::after {
+  border: none;
+}
+.dev-section.data-v-f97f9319 {
+  padding: 20rpx 30rpx 0;
+}
+.dev-card.data-v-f97f9319 {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 28rpx 30rpx;
+}
+.dev-header.data-v-f97f9319 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+.dev-title.data-v-f97f9319 {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+.dev-mode.data-v-f97f9319 {
+  font-size: 22rpx;
+  color: #666;
+}
+.dev-row.data-v-f97f9319 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-top: 1rpx solid #F3F3F3;
+}
+.dev-label.data-v-f97f9319 {
+  font-size: 26rpx;
+  color: #1A1A1A;
+}
+.dev-value.data-v-f97f9319 {
+  max-width: 420rpx;
+  font-size: 22rpx;
+  color: #999;
+  text-align: right;
+  word-break: break-all;
+}
+.dev-actions.data-v-f97f9319 {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+.btn-dev.data-v-f97f9319 {
+  flex: 1;
+  background: #000;
+  color: #fff;
+  border-radius: 18rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 26rpx;
+}
+.btn-dev-secondary.data-v-f97f9319 {
+  background: #F5F5F5;
+  color: #1A1A1A;
+}
+.btn-dev.data-v-f97f9319::after {
+  border: none;
+}
+
+/* 版本信息 */
+.version-info.data-v-f97f9319 {
+  text-align: center;
+  padding: 40rpx 0;
+}
+.version-text.data-v-f97f9319 {
+  font-size: 22rpx;
+  color: #CCC;
+}

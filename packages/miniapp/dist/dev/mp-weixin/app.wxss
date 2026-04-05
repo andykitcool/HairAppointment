@@ -1,0 +1,52 @@
+
+/* 全局样式 - 黑白极简风 */
+page {
+  background-color: #F5F5F5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  color: #1A1A1A;
+  font-size: 28rpx;
+  line-height: 1.5;
+}
+
+/* CSS 变量 */
+page {
+  --color-primary: #000000;
+  --color-bg: #F5F5F5;
+  --color-card: #FFFFFF;
+  --color-text: #1A1A1A;
+  --color-text-secondary: #666666;
+  --color-text-hint: #999999;
+  --color-success: #07C160;
+  --color-danger: #FA5151;
+  --color-warning: #FF9500;
+  --radius-card: 20rpx;
+  --radius-button: 48rpx;
+  --radius-tag: 8rpx;
+}
+
+/* 全局重置 */
+view, text, image, scroll-view, swiper, button, input, textarea {
+  box-sizing: border-box;
+}
+button {
+  margin: 0;
+  padding: 0;
+  background: none;
+  line-height: inherit;
+}
+button::after {
+  border: none;
+}
+
+/* 全局通用类 */
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+page{--status-bar-height:25px;--top-window-height:0px;--window-top:0px;--window-bottom:0px;--window-left:0px;--window-right:0px;--window-magin:0px}[data-c-h="true"]{display: none !important;}

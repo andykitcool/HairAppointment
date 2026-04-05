@@ -99,11 +99,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onShow } from 'vue'
-import { onPullDownRefresh } from '@dcloudio/uni-app'
-import { appointmentApi } from '@/api/request'
+import { ref, computed } from 'vue'
+import { onPullDownRefresh, onShow } from '@dcloudio/uni-app'
+import { appointmentApi, authApi } from '@/api/request'
+import { useUserStore } from '@/stores/user'
 
-const currentTab = ref('all')
+const userStore = useUserStore()
+
+const currentTab = ref('pending')
 const loading = ref(false)
 const expandedId = ref('')
 
@@ -131,9 +134,30 @@ const currentTabLabel = computed(() => {
 })
 
 const filteredList = computed(() => {
-  if (currentTab.value === 'all') return appointmentList.value
   return appointmentList.value.filter(i => i.status === currentTab.value)
 })
+
+async function ensureLogin() {
+  if (userStore.isLoggedIn && userStore.token) {
+    return true
+  }
+
+  try {
+    const loginRes = await uni.login({ provider: 'weixin' })
+    if (!loginRes?.code) {
+      return false
+    }
+    const data = await authApi.wechatLogin(loginRes.code) as any
+    if (data?.token && data?.user) {
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
 
 // 判断是否可以取消
 function canCancel(item: any): boolean {
@@ -179,7 +203,8 @@ async function onCancel(item: any) {
     success: async (res) => {
       if (res.confirm) {
         try {
-          await appointmentApi.cancel(item.appointment_id)
+          const id = item.appointment_id || item._id
+          await appointmentApi.cancel(id)
           uni.showToast({ title: '已取消', icon: 'success' })
           await loadAppointments()
         } catch (err: any) {
@@ -195,7 +220,12 @@ function goBooking() {
   uni.switchTab({ url: '/pages/index/index' })
 }
 
-onShow(() => {
+onShow(async () => {
+  const ok = await ensureLogin()
+  if (!ok) {
+    appointmentList.value = []
+    return
+  }
   loadAppointments()
 })
 

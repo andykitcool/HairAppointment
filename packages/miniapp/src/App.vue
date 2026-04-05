@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
+import { authApi } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 
 onLaunch(() => {
@@ -22,7 +23,6 @@ async function initApp() {
   // 如果本地有 token，尝试静默登录刷新
   if (userStore.token) {
     try {
-      const { authApi } = await import('@/api/request')
       const data = await authApi.getProfile() as any
       if (data) {
         userStore.setUser(data)
@@ -31,11 +31,30 @@ async function initApp() {
       // token 过期，清除
       userStore.logout()
     }
+  } else {
+    await silentWechatLogin()
   }
 
   // 获取系统信息
   const systemInfo = uni.getSystemInfoSync()
   console.log('System Info:', systemInfo.platform, systemInfo.system)
+}
+
+async function silentWechatLogin() {
+  const userStore = useUserStore()
+  try {
+    const loginRes = await uni.login({ provider: 'weixin' })
+    if (!loginRes?.code) {
+      return
+    }
+    const data = await authApi.wechatLogin(loginRes.code) as any
+    if (data?.token && data?.user) {
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+    }
+  } catch {
+    // 静默登录失败不阻塞应用启动，页面会按未登录态处理
+  }
 }
 </script>
 

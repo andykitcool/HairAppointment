@@ -130,6 +130,27 @@
       <button class="btn-logout" @tap="onLogout">退出登录</button>
     </view>
 
+    <view class="dev-section">
+      <view class="dev-card">
+        <view class="dev-header">
+          <text class="dev-title">开发环境</text>
+          <text class="dev-mode">{{ apiModeLabel }}</text>
+        </view>
+        <view class="dev-row">
+          <text class="dev-label">Mock 接口</text>
+          <switch :checked="useMock" color="#000000" @change="onMockToggle" />
+        </view>
+        <view class="dev-row" @tap="editBaseUrl">
+          <text class="dev-label">接口地址</text>
+          <text class="dev-value">{{ apiBaseUrl }}</text>
+        </view>
+        <view class="dev-actions">
+          <button class="btn-dev" @tap="editBaseUrl">修改地址</button>
+          <button class="btn-dev btn-dev-secondary" @tap="resetMockData">重置 Mock 数据</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 版本信息 -->
     <view class="version-info">
       <text class="version-text">美发预约 v1.0.0</text>
@@ -140,15 +161,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onShow } from 'vue'
-import { authApi } from '@/api/request'
+import { ref, computed } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
+import { authApi, getApiEnv, setMockEnabled, setApiBaseUrl, resetMockDb } from '@/api/request'
+import { useMerchantStore } from '@/stores/merchant'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
+const merchantStore = useMerchantStore()
 
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const isOwner = computed(() => userStore.userInfo.role === 'owner')
 const userInfo = computed(() => userStore.userInfo)
+const useMock = ref(true)
+const apiBaseUrl = ref('')
+const apiModeLabel = computed(() => (useMock.value ? 'Mock 模式' : '真实接口'))
+
+function syncApiEnv() {
+  const env = getApiEnv()
+  useMock.value = env.useMock
+  apiBaseUrl.value = env.baseUrl
+}
 
 // 手机号脱敏
 function maskPhone(phone: string): string {
@@ -180,12 +213,10 @@ async function loadProfile() {
 // 自动微信登录
 async function autoLogin() {
   try {
-    const [loginErr, loginRes] = await uni.login({
-      provider: 'weixin',
-    })
+    const loginRes = await uni.login({ provider: 'weixin' })
 
-    if (loginErr || !loginRes) {
-      console.log('uni.login failed:', loginErr)
+    if (!loginRes?.code) {
+      console.log('uni.login failed: missing code')
       return
     }
 
@@ -258,13 +289,45 @@ function onLogout() {
     success: (res) => {
       if (res.confirm) {
         userStore.logout()
+        merchantStore.clearMerchant()
         uni.showToast({ title: '已退出', icon: 'success' })
       }
     },
   })
 }
 
+function onMockToggle(event: any) {
+  const enabled = !!event.detail.value
+  setMockEnabled(enabled)
+  syncApiEnv()
+  uni.showToast({ title: enabled ? '已切换为 Mock' : '已切换为真实接口', icon: 'none' })
+}
+
+function editBaseUrl() {
+  uni.showModal({
+    title: '设置接口地址',
+    editable: true,
+    placeholderText: '例如 http://localhost:3000/api',
+    content: apiBaseUrl.value,
+    success: (res) => {
+      if (!res.confirm || res.content === undefined) {
+        return
+      }
+      setApiBaseUrl(res.content)
+      syncApiEnv()
+      uni.showToast({ title: '接口地址已更新', icon: 'success' })
+    },
+  })
+}
+
+function resetMockData() {
+  resetMockDb()
+  merchantStore.clearMerchant()
+  uni.showToast({ title: 'Mock 数据已重置', icon: 'success' })
+}
+
 onShow(() => {
+  syncApiEnv()
   loadProfile()
 })
 </script>
@@ -458,6 +521,80 @@ onShow(() => {
 }
 
 .btn-logout::after {
+  border: none;
+}
+
+.dev-section {
+  padding: 20rpx 30rpx 0;
+}
+
+.dev-card {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 28rpx 30rpx;
+}
+
+.dev-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+
+.dev-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+
+.dev-mode {
+  font-size: 22rpx;
+  color: #666;
+}
+
+.dev-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18rpx 0;
+  border-top: 1rpx solid #F3F3F3;
+}
+
+.dev-label {
+  font-size: 26rpx;
+  color: #1A1A1A;
+}
+
+.dev-value {
+  max-width: 420rpx;
+  font-size: 22rpx;
+  color: #999;
+  text-align: right;
+  word-break: break-all;
+}
+
+.dev-actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.btn-dev {
+  flex: 1;
+  background: #000;
+  color: #fff;
+  border-radius: 18rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 26rpx;
+}
+
+.btn-dev-secondary {
+  background: #F5F5F5;
+  color: #1A1A1A;
+}
+
+.btn-dev::after {
   border: none;
 }
 

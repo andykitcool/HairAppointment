@@ -1,0 +1,63 @@
+
+.container.data-v-b5aa9cd2 { min-height: 100vh; background: var(--color-bg, #F5F5F5); padding-bottom: 40rpx;
+}
+.tabs.data-v-b5aa9cd2 { display: flex; background: #fff; padding: 0 10rpx; overflow-x: auto;
+}
+.tab-item.data-v-b5aa9cd2 { padding: 24rpx 24rpx; font-size: 26rpx; color: #999; white-space: nowrap; border-bottom: 4rpx solid transparent;
+}
+.tab-item.active.data-v-b5aa9cd2 { color: #000; font-weight: 600; border-bottom-color: #000;
+}
+.tab-text.data-v-b5aa9cd2 { font-size: 26rpx;
+}
+.date-filter.data-v-b5aa9cd2 { padding: 20rpx 30rpx;
+}
+.date-picker.data-v-b5aa9cd2 { display: flex; align-items: center; gap: 8rpx; background: #fff; padding: 16rpx 24rpx; border-radius: 12rpx;
+}
+.date-text.data-v-b5aa9cd2 { font-size: 28rpx; color: #1A1A1A;
+}
+.date-arrow.data-v-b5aa9cd2 { font-size: 24rpx; color: #999;
+}
+.loading-state.data-v-b5aa9cd2, .empty-state.data-v-b5aa9cd2 { text-align: center; padding: 80rpx 0;
+}
+.loading-text.data-v-b5aa9cd2, .empty-text.data-v-b5aa9cd2 { font-size: 28rpx; color: #999;
+}
+.apt-list.data-v-b5aa9cd2 { padding: 0 30rpx;
+}
+.apt-card.data-v-b5aa9cd2 { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 16rpx;
+}
+.card-top.data-v-b5aa9cd2 { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx;
+}
+.apt-id.data-v-b5aa9cd2 { font-size: 24rpx; color: #999; font-family: monospace;
+}
+.status-tag.data-v-b5aa9cd2 { font-size: 22rpx; padding: 4rpx 14rpx; border-radius: 6rpx;
+}
+.status-tag.pending.data-v-b5aa9cd2 { background: #FFF5E6; color: #FF9500;
+}
+.status-tag.confirmed.data-v-b5aa9cd2 { background: #E6F9EE; color: #07C160;
+}
+.status-tag.in_progress.data-v-b5aa9cd2 { background: #E6F0FF; color: #1677FF;
+}
+.status-tag.completed.data-v-b5aa9cd2 { background: #F0F0F0; color: #999;
+}
+.card-body.data-v-b5aa9cd2 { padding-top: 12rpx; border-top: 1rpx solid #F5F5F5; margin-bottom: 16rpx;
+}
+.customer-name.data-v-b5aa9cd2 { font-size: 30rpx; font-weight: 600; color: #1A1A1A; display: block; margin-bottom: 8rpx;
+}
+.apt-time.data-v-b5aa9cd2 { font-size: 26rpx; color: #666; display: block; margin-bottom: 4rpx;
+}
+.service-text.data-v-b5aa9cd2 { font-size: 26rpx; color: #999; display: block;
+}
+.staff-text.data-v-b5aa9cd2 { font-size: 24rpx; color: #999; display: block; margin-top: 4rpx;
+}
+.card-actions.data-v-b5aa9cd2 { display: flex; gap: 12rpx; flex-wrap: wrap;
+}
+.btn-sm.data-v-b5aa9cd2 { font-size: 24rpx; padding: 10rpx 24rpx; border-radius: 8rpx; line-height: 1.2; border: none;
+}
+.btn-sm.data-v-b5aa9cd2::after { border: none;
+}
+.btn-black.data-v-b5aa9cd2 { background: #000; color: #fff;
+}
+.btn-red.data-v-b5aa9cd2 { background: none; color: #FA5151; border: 1rpx solid #FA5151;
+}
+.btn-outline.data-v-b5aa9cd2 { background: none; color: #1A1A1A; border: 1rpx solid #E0E0E0;
+}

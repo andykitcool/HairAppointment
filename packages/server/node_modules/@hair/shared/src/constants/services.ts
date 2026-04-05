@@ -1,0 +1,133 @@
+import type { ServiceCategory } from '../types/enums'
+import type { IServiceStage } from '../types/models'
+
+export interface IPresetService {
+  name: string
+  category: ServiceCategory
+  price: number            // 分
+  total_duration: number   // 分钟
+  staff_busy_duration: number // 分钟
+  stages: IServiceStage[]
+  description: string
+}
+
+/** 预设服务数据 */
+export const PRESET_SERVICES: IPresetService[] = [
+  {
+    name: '儿童剪发',
+    category: 'cut' as ServiceCategory,
+    price: 2000,           // 20 元
+    total_duration: 20,
+    staff_busy_duration: 20,
+    stages: [
+      { name: '剪发', duration: 20, staff_busy: true },
+    ],
+    description: '儿童专属剪发服务',
+  },
+  {
+    name: '男士剪发',
+    category: 'cut' as ServiceCategory,
+    price: 3000,           // 30 元
+    total_duration: 25,
+    staff_busy_duration: 25,
+    stages: [
+      { name: '剪发', duration: 25, staff_busy: true },
+    ],
+    description: '男士精剪服务',
+  },
+  {
+    name: '女士剪发',
+    category: 'cut' as ServiceCategory,
+    price: 5000,           // 50 元
+    total_duration: 30,
+    staff_busy_duration: 30,
+    stages: [
+      { name: '剪发', duration: 30, staff_busy: true },
+    ],
+    description: '女士精剪造型服务',
+  },
+  {
+    name: '染发',
+    category: 'dye' as ServiceCategory,
+    price: 15000,          // 150 元
+    total_duration: 80,
+    staff_busy_duration: 40,
+    stages: [
+      { name: '前期准备', duration: 20, staff_busy: true },
+      { name: '静置等待', duration: 40, staff_busy: false },
+      { name: '洗剪吹收尾', duration: 20, staff_busy: true },
+    ],
+    description: '专业染发服务，含洗剪吹',
+  },
+  {
+    name: '烫发',
+    category: 'perm' as ServiceCategory,
+    price: 20000,          // 200 元
+    total_duration: 75,
+    staff_busy_duration: 50,
+    stages: [
+      { name: '前期准备', duration: 30, staff_busy: true },
+      { name: '冷却定型', duration: 25, staff_busy: false },
+      { name: '收尾造型', duration: 20, staff_busy: true },
+    ],
+    description: '专业烫发服务，含造型',
+  },
+]
+
+/** 服务分类中文映射 */
+export const SERVICE_CATEGORY_LABELS: Record<string, string> = {
+  cut: '剪发',
+  perm: '烫发',
+  dye: '染发',
+  care: '养护',
+}
+
+/** 预约状态中文映射 */
+export const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  pending: '待确认',
+  confirmed: '已确认',
+  in_progress: '服务中',
+  completed: '已完成',
+  cancelled: '已取消',
+  no_show: '未到店',
+}
+
+/** 支付方式中文映射 */
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  wechat: '微信支付',
+  alipay: '支付宝',
+  cash: '现金',
+  stored_value: '储值卡',
+  punch_card: '次卡',
+  other: '其他',
+}
+
+/** 商户状态中文映射 */
+export const MERCHANT_STATUS_LABELS: Record<string, string> = {
+  pending: '待审核',
+  active: '营业中',
+  inactive: '已停业',
+  rejected: '已拒绝',
+}
+
+/** 用户角色中文映射 */
+export const USER_ROLE_LABELS: Record<string, string> = {
+  customer: '顾客',
+  owner: '店长',
+  staff: '店员',
+}
+
+/** 默认营业时间 */
+export const DEFAULT_BUSINESS_HOURS = {
+  start: '09:00',
+  end: '21:00',
+}
+
+/** 自动确认超时时间（毫秒） */
+export const AUTO_CONFIRM_TIMEOUT = 5 * 60 * 1000 // 5 分钟
+
+/** 预约提醒提前时间（毫秒） */
+export const APPOINTMENT_REMIND_BEFORE = 2 * 60 * 60 * 1000 // 2 小时
+
+/** 同步最大重试次数 */
+export const SYNC_MAX_RETRY = 3

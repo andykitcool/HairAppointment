@@ -1,0 +1,254 @@
+
+.container.data-v-6e84a449 {
+  min-height: 100vh;
+  background: var(--color-bg, #F5F5F5);
+}
+
+/* Tab 筛选 */
+.tabs.data-v-6e84a449 {
+  background: #fff;
+}
+.tabs-scroll.data-v-6e84a449 {
+  white-space: nowrap;
+}
+.tab-item.data-v-6e84a449 {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24rpx 32rpx;
+  position: relative;
+  min-width: 140rpx;
+}
+.tab-text.data-v-6e84a449 {
+  font-size: 28rpx;
+  color: #999;
+}
+.tab-item.active .tab-text.data-v-6e84a449 {
+  color: #000;
+  font-weight: 600;
+}
+.tab-badge.data-v-6e84a449 {
+  position: absolute;
+  top: 12rpx;
+  right: 12rpx;
+  background: #FA5151;
+  color: #fff;
+  font-size: 20rpx;
+  min-width: 32rpx;
+  height: 32rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8rpx;
+}
+.tab-underline.data-v-6e84a449 {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40rpx;
+  height: 6rpx;
+  background: #000;
+  border-radius: 3rpx;
+}
+
+/* 空状态 */
+.empty-state.data-v-6e84a449 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 200rpx;
+}
+.empty-icon-wrap.data-v-6e84a449 {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 50%;
+  background: #F0F0F0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 30rpx;
+}
+.empty-icon-text.data-v-6e84a449 {
+  font-size: 60rpx;
+}
+.empty-text.data-v-6e84a449 {
+  font-size: 28rpx;
+  color: #999;
+  margin-bottom: 40rpx;
+}
+.btn-empty.data-v-6e84a449 {
+  background: #000;
+  color: #fff;
+  border: none;
+  border-radius: 48rpx;
+  padding: 16rpx 60rpx;
+  font-size: 28rpx;
+}
+.btn-empty.data-v-6e84a449::after {
+  border: none;
+}
+
+/* 加载状态 */
+.loading-state.data-v-6e84a449 {
+  text-align: center;
+  padding: 120rpx 0;
+}
+.loading-text.data-v-6e84a449 {
+  font-size: 28rpx;
+  color: #999;
+}
+
+/* 预约列表 */
+.appointment-list.data-v-6e84a449 {
+  padding: 20rpx 30rpx;
+}
+.appointment-card.data-v-6e84a449 {
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  position: relative;
+}
+.card-header.data-v-6e84a449 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20rpx;
+}
+.service-name.data-v-6e84a449 {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status-tag.data-v-6e84a449 {
+  font-size: 22rpx;
+  padding: 6rpx 16rpx;
+  border-radius: 8rpx;
+  margin-left: 16rpx;
+  white-space: nowrap;
+}
+.status-tag.pending.data-v-6e84a449 { background: #FFF5E6; color: #FF9500;
+}
+.status-tag.confirmed.data-v-6e84a449 { background: #E6F9EE; color: #07C160;
+}
+.status-tag.in_progress.data-v-6e84a449 { background: #E6F0FF; color: #1677FF;
+}
+.status-tag.completed.data-v-6e84a449 { background: #F0F0F0; color: #999;
+}
+.status-tag.cancelled.data-v-6e84a449 { background: #F5F5F5; color: #CCC;
+}
+.status-tag.no_show.data-v-6e84a449 { background: #FFF0F0; color: #FA5151;
+}
+.card-body.data-v-6e84a449 {
+  padding-top: 16rpx;
+  border-top: 1rpx solid #F5F5F5;
+}
+.info-row.data-v-6e84a449 {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+.info-label.data-v-6e84a449 {
+  font-size: 26rpx;
+  color: #999;
+}
+.info-value.data-v-6e84a449 {
+  font-size: 26rpx;
+  color: #1A1A1A;
+}
+.info-value.mono.data-v-6e84a449 {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 24rpx;
+  color: #666;
+}
+
+/* 展开详情 */
+.card-detail.data-v-6e84a449 {
+  padding-top: 20rpx;
+  margin-top: 20rpx;
+  border-top: 1rpx solid #F0F0F0;
+}
+.detail-row.data-v-6e84a449 {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+.detail-label.data-v-6e84a449 {
+  font-size: 26rpx;
+  color: #999;
+}
+.detail-value.data-v-6e84a449 {
+  font-size: 26rpx;
+  color: #1A1A1A;
+}
+
+/* 时间线 */
+.timeline-section.data-v-6e84a449 {
+  margin-top: 16rpx;
+}
+.timeline-list.data-v-6e84a449 {
+  margin-top: 12rpx;
+  padding-left: 20rpx;
+}
+.timeline-item.data-v-6e84a449 {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+.timeline-dot.data-v-6e84a449 {
+  width: 16rpx;
+  height: 16rpx;
+  border-radius: 50%;
+  background: #E0E0E0;
+}
+.timeline-dot.busy.data-v-6e84a449 {
+  background: #000;
+}
+.timeline-name.data-v-6e84a449 {
+  font-size: 26rpx;
+  color: #1A1A1A;
+  flex: 1;
+}
+.timeline-time.data-v-6e84a449 {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 操作按钮 */
+.card-actions.data-v-6e84a449 {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #F0F0F0;
+  display: flex;
+  justify-content: flex-end;
+}
+.btn-cancel.data-v-6e84a449 {
+  background: none;
+  color: #FA5151;
+  border: 2rpx solid #FA5151;
+  border-radius: 48rpx;
+  font-size: 26rpx;
+  padding: 12rpx 36rpx;
+  line-height: 1;
+}
+.btn-cancel.data-v-6e84a449::after {
+  border: none;
+}
+
+/* 展开箭头 */
+.expand-arrow.data-v-6e84a449 {
+  text-align: center;
+  padding-top: 16rpx;
+}
+.arrow-text.data-v-6e84a449 {
+  font-size: 22rpx;
+  color: #CCC;
+}

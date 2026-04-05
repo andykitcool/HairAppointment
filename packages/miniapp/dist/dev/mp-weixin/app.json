@@ -1,0 +1,59 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/booking/create",
+    "pages/appointment/list",
+    "pages/profile/index"
+  ],
+  "subPackages": [
+    {
+      "root": "pages/owner",
+      "pages": [
+        "dashboard",
+        "appointments",
+        "proxy-booking",
+        "services",
+        "billing",
+        "schedule",
+        "customers",
+        "notifications",
+        "stats",
+        "apply"
+      ]
+    }
+  ],
+  "window": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "美发预约",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F5F5F5"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#000000",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页",
+        "iconPath": "static/tab/home.png",
+        "selectedIconPath": "static/tab/home-active.png"
+      },
+      {
+        "pagePath": "pages/appointment/list",
+        "text": "预约",
+        "iconPath": "static/tab/appointment.png",
+        "selectedIconPath": "static/tab/appointment-active.png"
+      },
+      {
+        "pagePath": "pages/profile/index",
+        "text": "我的",
+        "iconPath": "static/tab/profile.png",
+        "selectedIconPath": "static/tab/profile-active.png"
+      }
+    ]
+  },
+  "lazyCodeLoading": "requiredComponents",
+  "usingComponents": {}
+}

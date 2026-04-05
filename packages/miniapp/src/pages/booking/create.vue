@@ -125,6 +125,12 @@
           <text class="confirm-value">{{ selectedTime }}</text>
         </view>
 
+        <view class="contact-section">
+          <text class="confirm-label">预约联系人</text>
+          <input v-model="contactName" class="contact-input" placeholder="请输入联系人姓名" maxlength="20" />
+          <input v-model="contactPhone" class="contact-input" placeholder="请输入手机号" type="number" maxlength="11" />
+        </view>
+
         <!-- 备注 -->
         <view class="note-section">
           <text class="confirm-label">备注</text>
@@ -163,7 +169,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { serviceApi, appointmentApi } from '@/api/request'
+import { serviceApi, appointmentApi, authApi, merchantApi } from '@/api/request'
+import { useMerchantStore } from '@/stores/merchant'
+import { useUserStore } from '@/stores/user'
+
+const userStore = useUserStore()
+const merchantStore = useMerchantStore()
+const DEFAULT_MERCHANT_ID = 'M_mock_001'
 
 const merchantId = ref('')
 const merchantName = ref('美发工作室')
@@ -177,6 +189,8 @@ const selectedDateIndex = ref(0)
 const allSlots = ref<any[]>([])
 const selectedTime = ref('')
 const note = ref('')
+const contactName = ref('')
+const contactPhone = ref('')
 const submitting = ref(false)
 const loadingSlots = ref(false)
 const slotsClosed = ref(false)
@@ -269,6 +283,20 @@ async function loadSlots() {
 async function onSubmit() {
   if (submitting.value) return
   if (!selectedService.value || !selectedTime.value || !selectedDate.value) return
+  if (!merchantId.value) {
+    uni.showToast({ title: '门店信息异常，请返回重试', icon: 'none' })
+    return
+  }
+
+  if (!contactName.value.trim()) {
+    uni.showToast({ title: '请输入联系人姓名', icon: 'none' })
+    return
+  }
+
+  if (!/^1\d{10}$/.test(contactPhone.value.trim())) {
+    uni.showToast({ title: '请输入正确手机号', icon: 'none' })
+    return
+  }
 
   submitting.value = true
   try {
@@ -277,9 +305,12 @@ async function onSubmit() {
       service_id: selectedService.value.service_id,
       date: selectedDate.value,
       start_time: selectedTime.value,
+      customer_name: contactName.value.trim(),
+      customer_phone: contactPhone.value.trim(),
       note: note.value || undefined,
     }) as any
 
+    void data
     uni.showToast({ title: '预约成功', icon: 'success' })
     setTimeout(() => {
       uni.switchTab({ url: '/pages/appointment/list' })
@@ -291,10 +322,58 @@ async function onSubmit() {
   }
 }
 
+async function ensureLogin() {
+  if (userStore.isLoggedIn && userStore.token) {
+    return true
+  }
+
+  try {
+    const loginRes = await uni.login({ provider: 'weixin' })
+    if (!loginRes?.code) {
+      uni.showToast({ title: '请先登录', icon: 'none' })
+      return false
+    }
+    const data = await authApi.wechatLogin(loginRes.code) as any
+    if (data?.token && data?.user) {
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+      return true
+    }
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    return false
+  } catch {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    return false
+  }
+}
+
+watch([step, selectedDate, selectedService], async ([currentStep]) => {
+  if (currentStep === 2 && selectedService.value && selectedDate.value) {
+    await loadSlots()
+  }
+})
+
 // 页面初始化
 onLoad(async (query: any) => {
-  merchantId.value = query?.merchantId || ''
+  const ok = await ensureLogin()
+  if (!ok) return
+
+  merchantId.value = query?.merchantId || userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
   const preServiceId = query?.serviceId || ''
+  contactName.value = userStore.userInfo.realName || userStore.userInfo.nickname || ''
+  contactPhone.value = userStore.userInfo.phone || ''
+
+  if (merchantStore.merchantInfo.merchant_id === merchantId.value && merchantStore.merchantInfo.name) {
+    merchantName.value = merchantStore.merchantInfo.name
+  } else if (merchantId.value) {
+    try {
+      const merchant = await merchantApi.getInfo(merchantId.value) as any
+      merchantName.value = merchant?.name || merchantName.value
+      merchantStore.setMerchant(merchant)
+    } catch {
+      merchantName.value = '黑白造型工作室'
+    }
+  }
 
   // 生成日期列表
   dateList.value = generateDateList()
@@ -648,6 +727,22 @@ onLoad(async (query: any) => {
   font-size: 34rpx;
   font-weight: 700;
   color: #1A1A1A;
+}
+
+.contact-section {
+  margin-top: 24rpx;
+  margin-bottom: 20rpx;
+}
+
+.contact-input {
+  width: 100%;
+  background: #F8F8F8;
+  border-radius: 12rpx;
+  padding: 18rpx 20rpx;
+  font-size: 28rpx;
+  color: #1A1A1A;
+  margin-top: 12rpx;
+  box-sizing: border-box;
 }
 
 /* 备注 */

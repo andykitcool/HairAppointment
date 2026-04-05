@@ -63,7 +63,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onShow } from 'vue'
+import { ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { customerApi } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 

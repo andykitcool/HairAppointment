@@ -1,473 +1,951 @@
 <template>
   <view class="container">
-    <!-- 门店信息头部 -->
-    <view class="header">
-      <view class="header-bg"></view>
-      <view class="header-content">
-        <view class="store-info">
-          <text class="store-name">{{ merchant.name || '美发工作室' }}</text>
-          <view class="store-meta">
-            <text class="store-address" v-if="merchant.address">{{ merchant.address }}</text>
-            <text class="store-sep" v-if="merchant.address">·</text>
-            <text class="store-hours" :class="{ closed: !isBusinessOpen }">
-              {{ isBusinessOpen ? `营业中 ${merchant.business_hours?.start || '09:00'}-${effectiveEndTime}` : '已打烊' }}
-            </text>
+    <!-- ── 英雄横幅 ── -->
+    <view class="hero" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="hero-gradient"></view>
+      <view class="hero-body">
+        <view class="hero-left">
+          <text class="hero-name">{{ merchantInfo.name }}</text>
+          <view class="hero-meta-row">
+            <text class="hero-meta-icon">📍</text>
+            <text class="hero-meta-text">{{ merchantInfo.address || '暂无地址' }}</text>
+          </view>
+          <view class="hero-meta-row">
+            <text class="hero-meta-icon">🕐</text>
+            <text class="hero-meta-text">{{ merchantInfo.business_hours?.start || '09:00' }} – {{ merchantInfo.business_hours?.end || '18:00' }}</text>
           </view>
         </view>
-        <text class="store-phone" v-if="merchant.phone" @tap="callStore">{{ merchant.phone }}</text>
+        <view class="hero-staff">
+          <view class="staff-circle">
+            <text class="staff-circle-icon">✂</text>
+          </view>
+          <view class="staff-badge-row">
+            <text class="staff-star">★</text>
+            <text class="staff-score">4.9</text>
+          </view>
+          <text class="staff-name">Tony</text>
+          <text class="staff-title">技术总监</text>
+        </view>
       </view>
     </view>
 
-    <!-- 今日空档快览 -->
-    <view class="slots-preview" v-if="todaySlots.length > 0">
-      <view class="section-header">
-        <text class="section-title">今日空档</text>
-        <text class="section-more" @tap="goBooking('')">查看更多</text>
-      </view>
-      <scroll-view scroll-x class="slots-scroll">
-        <view class="slot-chip" v-for="slot in todaySlots.slice(0, 8)" :key="slot.start" @tap="quickBook(slot)">
-          <text class="slot-text">{{ slot.start }}</text>
+    <!-- ── 预约项目（横向滑动卡片）── -->
+    <view class="section-block">
+      <text class="section-title">预约项目</text>
+      <scroll-view scroll-x class="svc-scroll">
+        <view class="svc-row">
+          <view
+            v-for="svc in displayServices"
+            :key="svc.id"
+            class="svc-card"
+            :class="{ 'svc-card-on': selectedCategory?.id === svc.id }"
+            @tap="onSelectCategory(svc)"
+          >
+            <text class="svc-ico">{{ svc.icon }}</text>
+            <text class="svc-nm">{{ svc.name }}</text>
+            <text class="svc-dur">{{ svc.duration }} 分钟</text>
+            <text class="svc-price">{{ svc.apiPrice ? '¥' + formatPrice(svc.apiPrice) : '面议' }}</text>
+            <text class="svc-desc">{{ svc.desc }}</text>
+          </view>
         </view>
       </scroll-view>
     </view>
 
-    <!-- 打烊提示 -->
-    <view class="closed-notice" v-if="todayClosed">
-      <text class="closed-text">今日打烊，暂不可预约</text>
-    </view>
-
-    <!-- 服务项目列表 -->
-    <view class="service-list">
-      <text class="section-title">预约项目</text>
-      <view v-if="services.length === 0" class="loading-state">
-        <text class="loading-text">加载中...</text>
+    <!-- ── 到店时间（选完项目后展示）── -->
+    <view class="section-block" v-if="selectedCategory">
+      <view class="time-header">
+        <text class="time-title">到店时间</text>
+        <text class="rest-badge" v-if="restPeriod">{{ restPeriod }} 休息</text>
       </view>
-      <view v-else>
+
+      <!-- 日期横向选择 -->
+      <scroll-view scroll-x class="date-scroll">
+        <view class="date-row">
+          <view
+            v-for="(d, i) in dateList"
+            :key="d.date"
+            class="date-tab"
+            :class="{ 'date-tab-on': selectedDateIndex === i, 'date-tab-off': d.closed }"
+            @tap="!d.closed && selectDate(i)"
+          >
+            <text class="date-wday">{{ d.weekday }}</text>
+            <text class="date-md">{{ d.month }}/{{ d.day }}</text>
+          </view>
+        </view>
+      </scroll-view>
+
+      <!-- 时间段网格 -->
+      <view v-if="loadingSlots" class="slots-tip">
+        <text class="slots-tip-text">加载时段...</text>
+      </view>
+      <view v-else-if="slotsClosed" class="slots-tip">
+        <text class="slots-tip-text">当日打烊，暂不可预约</text>
+      </view>
+      <view v-else-if="allSlots.length === 0" class="slots-tip">
+        <text class="slots-tip-text">暂无可用时段</text>
+      </view>
+      <view v-else class="time-grid">
         <view
-          v-for="service in services"
-          :key="service.service_id"
-          class="service-card"
-          @tap="onServiceTap(service)"
+          v-for="slot in allSlots"
+          :key="slot.start"
+          class="time-slot"
+          :class="{ 'time-slot-on': selectedTime === slot.start, 'time-slot-dim': !slot.available }"
+          @tap="slot.available && selectTime(slot.start)"
         >
-          <view class="service-main">
-            <view class="service-name-row">
-              <text class="service-name">{{ service.name }}</text>
-              <view v-if="isHot(service)" class="hot-tag">HOT</view>
-            </view>
-            <text class="service-desc">{{ service.description || getCategoryLabel(service.category) }}</text>
-            <text class="service-duration">{{ service.total_duration }}分钟</text>
-          </view>
-          <view class="service-right">
-            <text class="service-price">¥{{ formatPrice(service.price) }}</text>
-            <view class="btn-book">预约</view>
-          </view>
+          <text class="time-text">{{ slot.start }}</text>
         </view>
       </view>
     </view>
 
-    <!-- 底部安全区域 -->
-    <view style="height: 120rpx;"></view>
+    <view class="bottom-safe"></view>
+  </view>
+
+  <!-- ── 底部预约按钮 ── -->
+  <view class="bottom-bar">
+    <view
+      class="btn-book"
+      :class="{ 'btn-book-dim': !canBook }"
+      @tap="onBook"
+    >
+      <text class="btn-book-text">预约</text>
+    </view>
+  </view>
+
+  <!-- ── 联系人弹层 ── -->
+  <view v-if="showSheet" class="sheet-wrap">
+    <view class="sheet-mask" @tap="showSheet = false"></view>
+    <view class="sheet-panel">
+      <view class="sheet-head">
+        <text class="sheet-title">预约联系人</text>
+        <view class="sheet-x" @tap="showSheet = false">
+          <text class="sheet-x-text">✕</text>
+        </view>
+      </view>
+      <view class="sheet-body">
+        <text class="field-label">姓名</text>
+        <input
+          class="field-input"
+          v-model="contactName"
+          placeholder="您的姓名"
+          placeholder-class="field-ph"
+          maxlength="20"
+        />
+        <text class="field-label">手机号码</text>
+        <input
+          class="field-input"
+          v-model="contactPhone"
+          placeholder="您的联系电话"
+          placeholder-class="field-ph"
+          type="number"
+          maxlength="11"
+        />
+        <view class="summary-card">
+          <view class="summary-row">
+            <text class="summary-key">服务项目</text>
+            <text class="summary-val">{{ selectedCategory?.name }}</text>
+          </view>
+          <view class="summary-row">
+            <text class="summary-key">发型师</text>
+            <text class="summary-val">Tony</text>
+          </view>
+          <view class="summary-row">
+            <text class="summary-key">到店时间</text>
+            <text class="summary-val">{{ selectedDateShort }} {{ selectedTime }}</text>
+          </view>
+        </view>
+      </view>
+      <view class="sheet-foot">
+        <view
+          class="btn-confirm"
+          :class="{ 'btn-confirm-dim': submitting }"
+          @tap="onSubmit"
+        >
+          <text class="btn-confirm-text">{{ submitting ? '提交中...' : '确认预约' }}</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onShow } from 'vue'
-import { onPullDownRefresh } from '@dcloudio/uni-app'
-import { serviceApi, appointmentApi, merchantApi } from '@/api/request'
+import { ref, computed, watch } from 'vue'
+import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
+import { serviceApi, appointmentApi, merchantApi, authApi } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 import { useMerchantStore } from '@/stores/merchant'
 
 const userStore = useUserStore()
 const merchantStore = useMerchantStore()
 
-// 当前商户 ID（Phase 1 默认使用第一个活跃商户）
-const DEFAULT_MERCHANT_ID = 'M_default'
+const DEFAULT_MERCHANT_ID = 'M_mock_001'
+const REST_PERIOD = '12:00-13:00'
 
-const merchant = ref({
-  merchant_id: '',
-  name: '',
-  address: '',
-  phone: '',
-  business_hours: { start: '09:00', end: '21:00' },
-  status: 'active',
-})
-const services = ref<any[]>([])
-const todaySlots = ref<any[]>([])
-const todayClosed = ref(false)
-
-// 计算有效结束时间（简化版，前端只展示默认时间）
-const effectiveEndTime = computed(() => merchant.value.business_hours?.end || '21:00')
-
-// 判断当前是否营业
-const isBusinessOpen = computed(() => {
-  const now = new Date()
-  const h = now.getHours()
-  const m = now.getMinutes()
-  const minutes = h * 60 + m
-  const start = merchant.value.business_hours?.start || '09:00'
-  const end = effectiveEndTime.value
-  const startMin = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1])
-  const endMin = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1])
-  return minutes >= startMin && minutes < endMin
-})
-
-// 判断是否热门服务
-function isHot(service: any): boolean {
-  return ['cut', 'dye'].includes(service.category) && service.price >= 3000
+// 状态栏高度（自定义导航栏时需要）
+const statusBarHeight = ref(0)
+try {
+  statusBarHeight.value = uni.getSystemInfoSync().statusBarHeight || 0
+} catch {
+  statusBarHeight.value = 0
 }
 
-// 分类标签
-function getCategoryLabel(category: string): string {
-  const map: Record<string, string> = { cut: '剪发', perm: '烫发', dye: '染发', care: '养护' }
-  return map[category] || ''
-}
+// ── 4 个预设服务分类 ──
+const CATEGORIES = [
+  { id: 'cat_cut',  name: '剪发', category: 'cut',  icon: '✂', duration: 45,  desc: '精准剪裁，塑造完美发型' },
+  { id: 'cat_perm', name: '烫发', category: 'perm', icon: '〜', duration: 120, desc: '持久定型，自然蓬松质感' },
+  { id: 'cat_dye',  name: '染发', category: 'dye',  icon: '◉', duration: 90,  desc: '潮流色系，呵护发质光泽' },
+  { id: 'cat_care', name: '养护', category: 'care', icon: '❋', duration: 60,  desc: '深层修护，锁水润泽养发' },
+]
 
-// 分转元
+const merchantInfo = ref<any>({
+  merchant_id: '', name: '黑白造型工作室',
+  address: '星光大道 88号2楼', phone: '',
+  business_hours: { start: '09:00', end: '18:00' }, status: 'active',
+})
+
+const apiServices = ref<any[]>([])
+
+// 将 API 服务映射到4个固定分类上
+const displayServices = computed(() =>
+  CATEGORIES.map(cat => {
+    const matched = apiServices.value.find((s: any) => s.category === cat.category)
+    return {
+      ...cat,
+      service_id: matched?.service_id || cat.id,
+      apiPrice: matched?.price ?? null,
+      duration: matched?.total_duration ?? cat.duration,
+      desc: matched?.description || cat.desc,
+    }
+  })
+)
+
+// 已选服务分类
+const selectedCategory = ref<any>(null)
+
+// 日期时间
+const dateList = ref<any[]>([])
+const selectedDateIndex = ref(0)
+const allSlots = ref<any[]>([])
+const selectedTime = ref('')
+const loadingSlots = ref(false)
+const slotsClosed = ref(false)
+
+// 联系人弹层
+const showSheet = ref(false)
+const contactName = ref('')
+const contactPhone = ref('')
+const submitting = ref(false)
+
+// ── Computed ──
+const canBook = computed(() => !!selectedCategory.value && !!selectedTime.value)
+const restPeriod = computed(() => REST_PERIOD)
+const selectedDate = computed(() => dateList.value[selectedDateIndex.value]?.date || '')
+const selectedDateShort = computed(() => {
+  const d = dateList.value[selectedDateIndex.value]
+  return d ? `${d.month}/${d.day}` : ''
+})
+
+// ── 工具函数 ──
 function formatPrice(fen: number): string {
   return (fen / 100).toFixed(0)
 }
 
-// 拨打店铺电话
-function callStore() {
-  uni.makePhoneCall({ phoneNumber: merchant.value.phone })
-}
-
-// 点击服务卡片
-function onServiceTap(service: any) {
-  goBooking(service.service_id)
-}
-
-// 快速预约
-function quickBook(slot: any) {
-  goBooking('')
-}
-
-// 跳转预约页
-function goBooking(serviceId: string) {
-  uni.navigateTo({
-    url: `/pages/booking/create?serviceId=${serviceId}&merchantId=${merchant.value.merchant_id}`,
-  })
-}
-
-// 加载商户信息
-async function loadMerchant() {
-  // 优先使用 store 中的商户信息
-  if (merchantStore.merchantInfo.merchantId) {
-    merchant.value = {
-      merchant_id: merchantStore.merchantInfo.merchantId,
-      name: merchantStore.merchantInfo.name,
-      address: merchantStore.merchantInfo.address,
-      phone: merchantStore.merchantInfo.phone,
-      business_hours: merchantStore.merchantInfo.businessHours,
-      status: merchantStore.merchantInfo.status,
-    }
-    return merchantStore.merchantInfo.merchantId
-  }
-
-  // 否则从 API 加载
-  try {
-    const merchantId = userStore.userInfo.merchantId || DEFAULT_MERCHANT_ID
-    if (!merchantId || merchantId === DEFAULT_MERCHANT_ID) {
-      // 未设置商户，显示默认
-      return ''
-    }
-    const data = await merchantApi.getInfo(merchantId) as any
-    merchant.value = {
-      merchant_id: data.merchant_id,
-      name: data.name,
-      address: data.address,
-      phone: data.phone,
-      business_hours: data.business_hours,
-      status: data.status,
-    }
-    merchantStore.setMerchant(data)
-    return data.merchant_id
-  } catch {
-    return ''
-  }
-}
-
-// 加载服务列表
-async function loadServices(merchantId: string) {
-  if (!merchantId) {
-    // 没有商户ID时，使用预设服务数据作为展示
-    services.value = [
-      { service_id: 'preset_1', name: '儿童剪发', category: 'cut', price: 2000, total_duration: 20, description: '儿童专属剪发服务' },
-      { service_id: 'preset_2', name: '男士剪发', category: 'cut', price: 3000, total_duration: 25, description: '男士精剪服务' },
-      { service_id: 'preset_3', name: '女士剪发', category: 'cut', price: 5000, total_duration: 30, description: '女士精剪造型服务' },
-      { service_id: 'preset_4', name: '染发', category: 'dye', price: 15000, total_duration: 80, description: '专业染发服务，含洗剪吹' },
-      { service_id: 'preset_5', name: '烫发', category: 'perm', price: 20000, total_duration: 75, description: '专业烫发服务，含造型' },
-    ]
-    return
-  }
-
-  try {
-    const data = await serviceApi.getList(merchantId) as any
-    services.value = Array.isArray(data) ? data : []
-  } catch {
-    services.value = []
-  }
-}
-
-// 加载今日空档
-async function loadTodaySlots(merchantId: string) {
-  if (!merchantId) return
-
-  const today = formatDate(new Date())
-  try {
-    const data = await appointmentApi.getAvailableSlots({
-      merchant_id: merchantId,
-      date: today,
-    }) as any
-    if (data?.closed) {
-      todayClosed.value = true
-      todaySlots.value = []
-    } else {
-      todayClosed.value = false
-      todaySlots.value = (data?.slots || []).filter((s: any) => s.available)
-    }
-  } catch {
-    todaySlots.value = []
-  }
-}
-
-function formatDate(date: Date): string {
+function formatDateStr(date: Date): string {
   const y = date.getFullYear()
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
 }
 
-// 页面加载
-onShow(() => {
-  loadPageData()
+function generateDateList() {
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date()
+    date.setDate(date.getDate() + i)
+    return {
+      date: formatDateStr(date),
+      weekday: i === 0 ? '今天' : i === 1 ? '明天' : weekdays[date.getDay()],
+      day: date.getDate(),
+      month: date.getMonth() + 1,
+      closed: false,
+    }
+  })
+}
+
+// ── 交互处理 ──
+function onSelectCategory(svc: any) {
+  if (selectedCategory.value?.id === svc.id) return
+  selectedCategory.value = svc
+  selectedTime.value = ''
+  if (selectedDate.value && merchantInfo.value.merchant_id) loadSlots()
+}
+
+function selectDate(index: number) {
+  selectedDateIndex.value = index
+  selectedTime.value = ''
+  if (selectedCategory.value) loadSlots()
+}
+
+function selectTime(time: string) {
+  selectedTime.value = time
+}
+
+async function loadSlots() {
+  if (!selectedDate.value || !merchantInfo.value.merchant_id) return
+  loadingSlots.value = true
+  slotsClosed.value = false
+  try {
+    const data = await appointmentApi.getAvailableSlots({
+      merchant_id: merchantInfo.value.merchant_id,
+      date: selectedDate.value,
+      service_id: selectedCategory.value?.service_id || '',
+    }) as any
+    if (data?.closed) {
+      slotsClosed.value = true
+      allSlots.value = []
+    } else {
+      allSlots.value = data?.slots || []
+    }
+  } catch {
+    allSlots.value = []
+  } finally {
+    loadingSlots.value = false
+  }
+}
+
+// 每次选中日期有效时自动加载时段
+watch(selectedDate, (val) => {
+  if (val && selectedCategory.value) loadSlots()
 })
 
-// 下拉刷新
+// ── 预约入口 ──
+function onBook() {
+  if (!canBook.value) return
+
+  const storedName = userStore.userInfo.realName || userStore.userInfo.nickname || ''
+  const storedPhone = userStore.userInfo.phone || ''
+  const storedAvatar = userStore.userInfo.avatarUrl || userStore.userInfo.avatar_url || ''
+
+  if (storedName && storedPhone && storedAvatar) {
+    // 三项均有 → 直接下单
+    contactName.value = storedName
+    contactPhone.value = storedPhone
+    void createAppointment()
+  } else {
+    // 缺少信息 → 弹层补全
+    contactName.value = storedName
+    contactPhone.value = storedPhone
+    showSheet.value = true
+  }
+}
+
+async function onSubmit() {
+  if (submitting.value) return
+  if (!contactName.value.trim()) {
+    uni.showToast({ title: '请输入联系人姓名', icon: 'none' })
+    return
+  }
+  if (!/^1\d{10}$/.test(contactPhone.value.trim())) {
+    uni.showToast({ title: '请输入正确手机号', icon: 'none' })
+    return
+  }
+  await createAppointment()
+}
+
+async function createAppointment() {
+  if (submitting.value) return
+  submitting.value = true
+  try {
+    await appointmentApi.create({
+      merchant_id: merchantInfo.value.merchant_id,
+      service_id: selectedCategory.value.service_id,
+      date: selectedDate.value,
+      start_time: selectedTime.value,
+      customer_name: contactName.value.trim(),
+      customer_phone: contactPhone.value.trim(),
+    }) as any
+    showSheet.value = false
+    uni.showToast({ title: '预约成功', icon: 'success' })
+    setTimeout(() => {
+      uni.switchTab({ url: '/pages/appointment/list' })
+    }, 1500)
+  } catch (err: any) {
+    uni.showToast({ title: err?.message || '预约失败，请重试', icon: 'none' })
+  } finally {
+    submitting.value = false
+  }
+}
+
+// ── 登录 & 数据加载 ──
+async function ensureLogin() {
+  if (userStore.isLoggedIn && userStore.token) return true
+  try {
+    const loginRes = await uni.login({ provider: 'weixin' })
+    if (!loginRes?.code) return false
+    const data = await authApi.wechatLogin(loginRes.code) as any
+    if (data?.token && data?.user) {
+      userStore.setToken(data.token)
+      userStore.setUser(data.user)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+async function loadMerchant(): Promise<string> {
+  if (merchantStore.merchantInfo.merchant_id) {
+    merchantInfo.value = { ...merchantStore.merchantInfo }
+    return merchantStore.merchantInfo.merchant_id
+  }
+  const mid = userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
+  try {
+    const data = await merchantApi.getInfo(mid) as any
+    merchantInfo.value = data
+    merchantStore.setMerchant(data)
+    return data.merchant_id
+  } catch {
+    merchantInfo.value = {
+      merchant_id: DEFAULT_MERCHANT_ID,
+      name: '黑白造型工作室',
+      address: '星光大道 88号2楼',
+      phone: '13800000000',
+      business_hours: { start: '09:00', end: '18:00' },
+      status: 'active',
+    }
+    return DEFAULT_MERCHANT_ID
+  }
+}
+
+async function init() {
+  await ensureLogin()
+  const mid = await loadMerchant()
+  dateList.value = generateDateList()
+  try {
+    const data = await serviceApi.getList(mid) as any
+    apiServices.value = Array.isArray(data) ? data : []
+  } catch {
+    apiServices.value = []
+  }
+}
+
+onShow(() => { void init() })
 onPullDownRefresh(async () => {
-  await loadPageData()
+  await init()
   uni.stopPullDownRefresh()
 })
-
-async function loadPageData() {
-  const merchantId = await loadMerchant()
-  await Promise.all([
-    loadServices(merchantId),
-    loadTodaySlots(merchantId),
-  ])
-}
 </script>
 
 <style scoped>
+/* ── 容器 ── */
 .container {
   min-height: 100vh;
-  background: var(--color-bg, #F5F5F5);
+  background: #F5F5F5;
+  padding-bottom: 200rpx;
 }
 
-/* 头部 */
-.header {
+/* ── 英雄横幅 ── */
+.hero {
   position: relative;
-  background: #000;
-  padding: 80rpx 40rpx 40rpx;
-  color: #fff;
+  height: 460rpx;
+  background: #1A1A1A;
   overflow: hidden;
 }
 
-.header-bg {
+.hero-gradient {
   position: absolute;
-  top: -60rpx;
-  right: -40rpx;
-  width: 300rpx;
-  height: 300rpx;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(160deg, #2A2A2A 0%, #0A0A0A 100%);
 }
 
-.header-content {
+.hero-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 40rpx 48rpx;
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: flex-start;
-  position: relative;
-  z-index: 1;
 }
 
-.store-name {
-  font-size: 40rpx;
-  font-weight: 700;
-  display: block;
-  margin-bottom: 12rpx;
-}
-
-.store-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8rpx;
-}
-
-.store-address, .store-hours, .store-sep {
-  font-size: 24rpx;
-  opacity: 0.8;
-}
-
-.store-hours.closed {
-  color: #FF6B6B;
-  opacity: 1;
-}
-
-.store-phone {
-  font-size: 24rpx;
-  padding: 10rpx 20rpx;
-  border: 1rpx solid rgba(255, 255, 255, 0.3);
-  border-radius: 30rpx;
-  opacity: 0.9;
-  margin-top: 8rpx;
-}
-
-/* 今日空档 */
-.slots-preview {
-  background: #fff;
-  padding: 24rpx 30rpx;
-  margin-bottom: 20rpx;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20rpx;
-}
-
-.section-title {
-  font-size: 30rpx;
-  font-weight: 700;
-  color: #1A1A1A;
-}
-
-.section-more {
-  font-size: 24rpx;
-  color: #999;
-}
-
-.slots-scroll {
-  white-space: nowrap;
-}
-
-.slot-chip {
-  display: inline-block;
-  background: #F5F5F5;
-  border-radius: 12rpx;
-  padding: 12rpx 24rpx;
-  margin-right: 16rpx;
-}
-
-.slot-text {
-  font-size: 26rpx;
-  color: #1A1A1A;
-  font-weight: 500;
-}
-
-/* 打烊提示 */
-.closed-notice {
-  background: #FFF5E6;
-  padding: 24rpx 30rpx;
-  margin-bottom: 20rpx;
-  text-align: center;
-}
-
-.closed-text {
-  font-size: 28rpx;
-  color: #FF9500;
-}
-
-/* 服务列表 */
-.service-list {
-  padding: 0 30rpx;
-}
-
-.service-card {
-  background: #fff;
-  border-radius: 20rpx;
-  padding: 30rpx;
-  margin-bottom: 20rpx;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.service-main {
+.hero-left {
   flex: 1;
-  min-width: 0;
+  margin-right: 24rpx;
 }
 
-.service-name-row {
+.hero-name {
+  display: block;
+  font-size: 48rpx;
+  font-weight: 800;
+  color: #FFFFFF;
+  letter-spacing: 2rpx;
+  margin-bottom: 18rpx;
+}
+
+.hero-meta-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
   margin-bottom: 8rpx;
 }
 
-.service-name {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #1A1A1A;
-}
-
-.hot-tag {
-  background: #000;
-  color: #fff;
-  font-size: 18rpx;
-  padding: 2rpx 12rpx;
-  border-radius: 6rpx;
-  font-weight: 600;
-}
-
-.service-desc {
+.hero-meta-icon {
   font-size: 24rpx;
-  color: #999;
+  margin-right: 8rpx;
+}
+
+.hero-meta-text {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* 员工卡片 */
+.hero-staff {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 120rpx;
+}
+
+.staff-circle {
+  width: 100rpx;
+  height: 100rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 2rpx solid rgba(255, 255, 255, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8rpx;
+}
+
+.staff-circle-icon {
+  font-size: 36rpx;
+  color: #FFFFFF;
+}
+
+.staff-badge-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6rpx;
+}
+
+.staff-star {
+  font-size: 22rpx;
+  color: #FFD700;
+  margin-right: 4rpx;
+}
+
+.staff-score {
+  font-size: 22rpx;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.staff-name {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin-bottom: 2rpx;
+}
+
+.staff-title {
+  font-size: 20rpx;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── 通用区块 ── */
+.section-block {
+  margin: 24rpx 0 0;
+  background: #FFFFFF;
+  padding: 36rpx 0 36rpx 40rpx;
+}
+
+.section-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1A1A1A;
   display: block;
-  margin-bottom: 4rpx;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-bottom: 28rpx;
+  padding-right: 40rpx;
+}
+
+/* ── 服务分类横滑 ── */
+.svc-scroll {
   white-space: nowrap;
 }
 
-.service-duration {
-  font-size: 22rpx;
-  color: #BBB;
+.svc-row {
+  display: inline-flex;
+  padding-right: 40rpx;
 }
 
-.service-right {
-  display: flex;
+.svc-card {
+  display: inline-flex;
   flex-direction: column;
-  align-items: flex-end;
-  margin-left: 20rpx;
+  align-items: center;
+  justify-content: center;
+  width: 220rpx;
+  min-height: 280rpx;
+  border-radius: 24rpx;
+  border: 2rpx solid #E8E8E8;
+  background: #FAFAFA;
+  margin-right: 20rpx;
+  padding: 32rpx 20rpx;
+  box-sizing: border-box;
 }
 
-.service-price {
-  font-size: 34rpx;
+.svc-card-on {
+  background: #1A1A1A;
+  border-color: #1A1A1A;
+}
+
+.svc-ico {
+  font-size: 48rpx;
+  margin-bottom: 16rpx;
+  color: #1A1A1A;
+}
+
+.svc-card-on .svc-ico {
+  color: #FFFFFF;
+}
+
+.svc-nm {
+  font-size: 32rpx;
   font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 10rpx;
+}
+
+.svc-card-on .svc-nm {
+  color: #FFFFFF;
+}
+
+.svc-dur {
+  font-size: 22rpx;
+  color: #999999;
+  margin-bottom: 8rpx;
+}
+
+.svc-card-on .svc-dur {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.svc-price {
+  font-size: 26rpx;
+  font-weight: 600;
   color: #1A1A1A;
   margin-bottom: 12rpx;
 }
 
-.btn-book {
-  background: #000;
-  color: #fff;
-  font-size: 22rpx;
-  padding: 8rpx 24rpx;
-  border-radius: 24rpx;
-  font-weight: 500;
+.svc-card-on .svc-price {
+  color: #FFFFFF;
 }
 
-/* 加载状态 */
-.loading-state {
+.svc-desc {
+  font-size: 20rpx;
+  color: #BBBBBB;
   text-align: center;
-  padding: 60rpx 0;
+  line-height: 1.4;
+  white-space: normal;
 }
 
-.loading-text {
+.svc-card-on .svc-desc {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* ── 到店时间 ── */
+.time-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 40rpx;
+  margin-bottom: 28rpx;
+}
+
+.time-header .section-title {
+  margin-bottom: 0;
+}
+
+.time-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.rest-badge {
+  font-size: 22rpx;
+  color: #999999;
+  background: #F5F5F5;
+  border-radius: 20rpx;
+  padding: 6rpx 18rpx;
+}
+
+/* 日期选择 */
+.date-scroll {
+  white-space: nowrap;
+  margin-bottom: 28rpx;
+}
+
+.date-row {
+  display: inline-flex;
+  padding-right: 40rpx;
+}
+
+.date-tab {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 20rpx;
+  background: #F5F5F5;
+  margin-right: 16rpx;
+}
+
+.date-tab-on {
+  background: #1A1A1A;
+}
+
+.date-tab-off {
+  opacity: 0.4;
+}
+
+.date-wday {
+  font-size: 20rpx;
+  color: #999999;
+  margin-bottom: 4rpx;
+}
+
+.date-tab-on .date-wday {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.date-md {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.date-tab-on .date-md {
+  color: #FFFFFF;
+}
+
+/* 时间占位提示 */
+.slots-tip {
+  padding: 40rpx 0;
+  text-align: center;
+  padding-right: 40rpx;
+}
+
+.slots-tip-text {
   font-size: 28rpx;
-  color: #999;
+  color: #BBBBBB;
+}
+
+/* 时间网格 */
+.time-grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding-right: 40rpx;
+  gap: 16rpx;
+}
+
+.time-slot {
+  width: calc(25% - 12rpx);
+  height: 80rpx;
+  border-radius: 16rpx;
+  background: #F5F5F5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.time-slot-on {
+  background: #1A1A1A;
+}
+
+.time-slot-dim {
+  opacity: 0.3;
+}
+
+.time-text {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #1A1A1A;
+}
+
+.time-slot-on .time-text {
+  color: #FFFFFF;
+}
+
+.bottom-safe {
+  height: 40rpx;
+}
+
+/* ── 底部预约按钮 ── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20rpx 40rpx 60rpx;
+  background: #FFFFFF;
+  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
+}
+
+.btn-book {
+  background: #1A1A1A;
+  border-radius: 24rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-book-dim {
+  opacity: 0.4;
+}
+
+.btn-book-text {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: 4rpx;
+}
+
+/* ── 联系人弹层 ── */
+.sheet-wrap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+}
+
+.sheet-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.sheet-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 40rpx 40rpx 60rpx;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40rpx;
+}
+
+.sheet-title {
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.sheet-x {
+  width: 64rpx;
+  height: 64rpx;
+  border-radius: 50%;
+  background: #F5F5F5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sheet-x-text {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.sheet-body {
+  margin-bottom: 32rpx;
+}
+
+.field-label {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  margin-bottom: 12rpx;
+}
+
+.field-input {
+  width: 100%;
+  height: 96rpx;
+  background: #F8F8F8;
+  border-radius: 20rpx;
+  padding: 0 28rpx;
+  font-size: 30rpx;
+  color: #1A1A1A;
+  margin-bottom: 24rpx;
+  box-sizing: border-box;
+}
+
+.summary-card {
+  background: #F8F8F8;
+  border-radius: 20rpx;
+  padding: 24rpx 28rpx;
+  margin-top: 12rpx;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10rpx 0;
+}
+
+.summary-key {
+  font-size: 26rpx;
+  color: #888888;
+}
+
+.summary-val {
+  font-size: 26rpx;
+  font-weight: 500;
+  color: #1A1A1A;
+}
+
+.sheet-foot {
+  margin-top: 8rpx;
+}
+
+.btn-confirm {
+  background: #1A1A1A;
+  border-radius: 24rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-confirm-dim {
+  opacity: 0.5;
+}
+
+.btn-confirm-text {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: 2rpx;
 }
 </style>
