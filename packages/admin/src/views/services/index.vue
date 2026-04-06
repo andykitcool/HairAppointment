@@ -4,185 +4,423 @@
       <template #header>
         <div class="header-row">
           <span class="header-title">服务管理</span>
-          <el-button type="primary" @click="openDialog()">新增服务</el-button>
+          <el-button type="primary" @click="addNewRow" :disabled="editingCell !== null">新增服务</el-button>
         </div>
       </template>
 
-      <el-table :data="tableData" stripe v-loading="loading">
-        <el-table-column prop="name" label="服务名称" width="140" />
-        <el-table-column prop="category" label="分类" width="100">
-          <template #default="{ row }">{{ categoryLabel(row.category) }}</template>
-        </el-table-column>
-        <el-table-column label="价格" width="100">
-          <template #default="{ row }"><span style="font-weight:600">¥{{ (row.price / 100).toFixed(0) }}</span></template>
-        </el-table-column>
-        <el-table-column label="总时长" width="90">
-          <template #default="{ row }">{{ row.total_duration }}分钟</template>
-        </el-table-column>
-        <el-table-column label="忙碌时长" width="90">
-          <template #default="{ row }">{{ row.staff_busy_duration }}分钟</template>
-        </el-table-column>
-        <el-table-column label="服务阶段" min-width="200">
+      <el-table :data="tableData" stripe v-loading="loading" row-key="service_id">
+        <el-table-column prop="name" label="服务名称" min-width="160">
           <template #default="{ row }">
-            <el-tag v-for="(stage, idx) in (row.stages || [])" :key="idx" size="small" style="margin: 2px" :type="stage.staff_busy ? 'danger' : 'success'">
-              {{ stage.name }} {{ stage.duration }}min {{ stage.staff_busy ? '(忙)' : '(闲)' }}
-            </el-tag>
+            <div @dblclick="startEdit(row, 'name')" class="cell-content">
+              <el-input 
+                v-if="isEditing(row, 'name')" 
+                v-model="editValue" 
+                size="small" 
+                placeholder="服务名称" 
+                style="width: 140px"
+                @blur="saveEdit(row, 'name')"
+                @keyup.enter="saveEdit(row, 'name')"
+                ref="nameInput"
+              />
+              <span v-else>{{ row.name }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="is_active" label="状态" width="80">
+        <el-table-column prop="category" label="分类" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '上架' : '下架' }}</el-tag>
+            <div @dblclick="startEdit(row, 'category')" class="cell-content">
+              <el-select 
+                v-if="isEditing(row, 'category')" 
+                v-model="editValue" 
+                size="small" 
+                style="width: 90px"
+                @change="saveEdit(row, 'category')"
+                @blur="saveEdit(row, 'category')"
+                ref="categoryInput"
+              >
+                <el-option label="剪发" value="cut" />
+                <el-option label="烫发" value="perm" />
+                <el-option label="染发" value="dye" />
+                <el-option label="养护" value="care" />
+              </el-select>
+              <span v-else>{{ categoryLabel(row.category) }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="sort_order" label="排序" width="70" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="价格" min-width="100">
           <template #default="{ row }">
-            <el-button size="small" @click="openDialog(row)">编辑</el-button>
-            <el-popconfirm title="确定删除该服务？" @confirm="deleteItem(row)">
-              <template #reference>
-                <el-button type="danger" size="small" plain :disabled="row.is_active">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <div @dblclick="startEdit(row, 'price')" class="cell-content">
+              <el-input-number 
+                v-if="isEditing(row, 'price')" 
+                v-model="editValue" 
+                :min="0" 
+                size="small" 
+                style="width: 90px"
+                @blur="saveEdit(row, 'price')"
+                ref="priceInput"
+              />
+              <span v-else style="font-weight:600">¥{{ (row.price / 100).toFixed(0) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="总时长" min-width="100">
+          <template #default="{ row }">
+            <div @dblclick="startEdit(row, 'total_duration')" class="cell-content">
+              <el-input-number 
+                v-if="isEditing(row, 'total_duration')" 
+                v-model="editValue" 
+                :min="1" 
+                size="small" 
+                style="width: 80px"
+                @blur="saveEdit(row, 'total_duration')"
+                ref="totalDurationInput"
+              />
+              <span v-else>{{ row.total_duration }}分</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="忙碌时长" min-width="100">
+          <template #default="{ row }">
+            <div @dblclick="startEdit(row, 'staff_busy_duration')" class="cell-content">
+              <el-input-number 
+                v-if="isEditing(row, 'staff_busy_duration')" 
+                v-model="editValue" 
+                :min="0" 
+                :max="row.total_duration"
+                size="small" 
+                style="width: 80px"
+                @blur="saveEdit(row, 'staff_busy_duration')"
+                ref="staffBusyDurationInput"
+              />
+              <span v-else>{{ row.staff_busy_duration }}分</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="服务阶段" min-width="280">
+          <template #default="{ row }">
+            <div @dblclick="startEdit(row, 'stages')" class="cell-content">
+              <div v-if="isEditing(row, 'stages')" class="stages-edit">
+                <div v-for="(stage, idx) in editStages" :key="idx" class="stage-item">
+                  <el-input v-model="stage.name" size="small" placeholder="阶段名" style="width: 90px" />
+                  <el-input-number v-model="stage.duration" :min="1" size="small" style="width: 60px" />
+                  <el-checkbox v-model="stage.staff_busy" size="small">忙</el-checkbox>
+                  <el-button type="danger" link size="small" @click="removeStage(idx)" :disabled="editStages.length <= 1">×</el-button>
+                </div>
+                <div class="stage-actions">
+                  <el-button type="primary" link size="small" @click="addStage">+ 添加阶段</el-button>
+                  <el-button type="success" link size="small" @click="saveStages(row)">保存</el-button>
+                </div>
+              </div>
+              <div v-else>
+                <el-tag v-for="(stage, idx) in (row.stages || [])" :key="idx" size="small" style="margin: 2px" :type="stage.staff_busy ? 'danger' : 'success'">
+                  {{ stage.name }} {{ stage.duration }}min
+                </el-tag>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="is_active" label="状态" min-width="90">
+          <template #default="{ row }">
+            <div @dblclick="startEdit(row, 'is_active')" class="cell-content">
+              <el-switch 
+                v-if="isEditing(row, 'is_active')" 
+                v-model="editValue" 
+                size="small"
+                @change="saveEdit(row, 'is_active')"
+                ref="isActiveInput"
+              />
+              <el-tag v-else :type="row.is_active ? 'success' : 'info'" size="small">{{ row.is_active ? '上架' : '下架' }}</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="sort_order" label="排序" min-width="90">
+          <template #default="{ row }">
+            <div @dblclick="startEdit(row, 'sort_order')" class="cell-content">
+              <el-input-number 
+                v-if="isEditing(row, 'sort_order')" 
+                v-model="editValue" 
+                :min="0" 
+                size="small" 
+                style="width: 70px"
+                @blur="saveEdit(row, 'sort_order')"
+                ref="sortOrderInput"
+              />
+              <span v-else>{{ row.sort_order }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="100" fixed="right">
+          <template #default="{ row }">
+            <div v-if="row._isNew" class="action-btns">
+              <el-button type="primary" size="small" @click="saveNewRow(row)" :loading="saving">保存</el-button>
+            </div>
+            <div v-else class="action-btns">
+              <el-popconfirm title="确定下架该服务？" @confirm="deleteItem(row)">
+                <template #reference>
+                  <el-button type="danger" size="small" plain :disabled="!row.is_active">下架</el-button>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
-
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑服务' : '新增服务'" width="560px">
-      <el-form :model="form" label-width="100px">
-        <el-form-item label="服务名称" required>
-          <el-input v-model="form.name" style="width: 300px" />
-        </el-form-item>
-        <el-form-item label="分类" required>
-          <el-select v-model="form.category" style="width: 300px">
-            <el-option label="剪发" value="cut" />
-            <el-option label="烫发" value="perm" />
-            <el-option label="染发" value="dye" />
-            <el-option label="护理" value="care" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="价格（元）" required>
-          <el-input-number v-model="form.priceYuan" :min="0" :precision="0" style="width: 300px" />
-        </el-form-item>
-        <el-form-item label="总时长（分钟）" required>
-          <el-input-number v-model="form.total_duration" :min="1" style="width: 300px" />
-        </el-form-item>
-        <el-form-item label="忙碌时长（分钟）" required>
-          <el-input-number v-model="form.staff_busy_duration" :min="0" :max="form.total_duration" style="width: 300px" />
-        </el-form-item>
-        <el-form-item label="服务阶段">
-          <div style="width: 100%">
-            <div v-for="(stage, idx) in form.stages" :key="idx" style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center">
-              <el-input v-model="stage.name" placeholder="阶段名称" style="flex: 2" />
-              <el-input-number v-model="stage.duration" :min="1" placeholder="时长" style="width: 100px" />
-              <el-switch v-model="stage.staff_busy" active-text="忙碌" inactive-text="空闲" />
-              <el-button type="danger" plain size="small" @click="removeStage(idx)" :disabled="form.stages.length <= 1">×</el-button>
-            </div>
-            <el-button type="primary" plain size="small" @click="addStage">+ 添加阶段</el-button>
-          </div>
-        </el-form-item>
-        <el-form-item label="上架">
-          <el-switch v-model="form.is_active" />
-        </el-form-item>
-        <el-form-item label="排序">
-          <el-input-number v-model="form.sort_order" :min="0" style="width: 300px" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" style="width: 300px" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="onSubmit">保存</el-button>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { serviceApi } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
 const authStore = useAuthStore()
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref<any[]>([])
-const dialogVisible = ref(false)
-const editingId = ref('')
 
-const categoryLabel = (c: string) => ({ cut: '剪发', perm: '烫发', dye: '染发', care: '护理' }[c] || c)
+// 单元格编辑状态: { rowId: string, field: string } | null
+const editingCell = ref<{ rowId: string; field: string } | null>(null)
+const editValue = ref<any>(null)
+const editStages = ref<any[]>([])
 
-const emptyForm = () => ({
-  name: '', category: 'cut', priceYuan: 0, total_duration: 30, staff_busy_duration: 30,
-  stages: [{ name: '', duration: 30, staff_busy: true }], is_active: true, sort_order: 0, description: '',
-})
+// 输入框引用
+const nameInput = ref<any>(null)
+const categoryInput = ref<any>(null)
+const priceInput = ref<any>(null)
+const totalDurationInput = ref<any>(null)
+const staffBusyDurationInput = ref<any>(null)
+const isActiveInput = ref<any>(null)
+const sortOrderInput = ref<any>(null)
 
-const form = ref<any>(emptyForm())
+const categoryLabel = (c: string) => ({ cut: '剪发', perm: '烫发', dye: '染发', care: '养护' }[c] || c)
 
-function addStage() { form.value.stages.push({ name: '', duration: 10, staff_busy: false }) }
-function removeStage(idx: number) { form.value.stages.splice(idx, 1) }
-
-function openDialog(row?: any) {
-  if (row) {
-    editingId.value = row._id
-    form.value = {
-      ...row,
-      priceYuan: row.price / 100,
-      stages: row.stages?.length ? [...row.stages.map((s: any) => ({ ...s }))] : [{ name: '', duration: row.total_duration, staff_busy: true }],
-    }
-  } else {
-    editingId.value = ''
-    form.value = emptyForm()
-  }
-  dialogVisible.value = true
+function isEditing(row: any, field: string) {
+  return editingCell.value?.rowId === row.service_id && editingCell.value?.field === field
 }
 
-async function onSubmit() {
-  if (!form.value.name.trim()) return ElMessage.warning('请输入服务名称')
+async function startEdit(row: any, field: string) {
+  // 如果有其他单元格正在编辑，先保存
+  if (editingCell.value && (editingCell.value.rowId !== row.service_id || editingCell.value.field !== field)) {
+    // 查找之前编辑的行
+    const prevRow = tableData.value.find(r => r.service_id === editingCell.value?.rowId)
+    if (prevRow && editingCell.value.field !== 'stages') {
+      await saveEdit(prevRow, editingCell.value.field, false)
+    }
+  }
+  
+  editingCell.value = { rowId: row.service_id, field }
+  
+  // 设置编辑值
+  if (field === 'price') {
+    editValue.value = row.price / 100
+  } else if (field === 'stages') {
+    editStages.value = row.stages?.length ? JSON.parse(JSON.stringify(row.stages)) : [{ name: '', duration: 30, staff_busy: true }]
+  } else {
+    editValue.value = row[field]
+  }
+  
+  // 自动聚焦
+  await nextTick()
+  const inputRef = {
+    name: nameInput,
+    category: categoryInput,
+    price: priceInput,
+    total_duration: totalDurationInput,
+    staff_busy_duration: staffBusyDurationInput,
+    is_active: isActiveInput,
+    sort_order: sortOrderInput,
+  }[field]
+  inputRef?.value?.focus?.()
+}
+
+async function saveEdit(row: any, field: string, showMessage = true) {
+  if (!editingCell.value || editingCell.value.rowId !== row.service_id || editingCell.value.field !== field) return
+  
+  saving.value = true
+  try {
+    let updateData: any = { [field]: editValue.value }
+    
+    if (field === 'price') {
+      updateData.price = Math.round(editValue.value * 100)
+    }
+    
+    await serviceApi.update(row.service_id, updateData)
+    if (showMessage) ElMessage.success('更新成功')
+    
+    // 更新本地数据
+    if (field === 'price') {
+      row.price = updateData.price
+    } else {
+      row[field] = editValue.value
+    }
+    
+    editingCell.value = null
+    editValue.value = null
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function saveStages(row: any) {
+  saving.value = true
+  try {
+    await serviceApi.update(row.service_id, { stages: editStages.value })
+    ElMessage.success('更新成功')
+    row.stages = JSON.parse(JSON.stringify(editStages.value))
+    editingCell.value = null
+    editStages.value = []
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function addStage() {
+  editStages.value.push({ name: '', duration: 10, staff_busy: false })
+}
+
+function removeStage(idx: number) {
+  editStages.value.splice(idx, 1)
+}
+
+function addNewRow() {
+  const newId = 'temp_' + Date.now()
+  const newRow = {
+    service_id: newId,
+    name: '',
+    category: 'cut',
+    price: 0,
+    total_duration: 30,
+    staff_busy_duration: 30,
+    stages: [{ name: '', duration: 30, staff_busy: true }],
+    is_active: true,
+    sort_order: tableData.value.length,
+    description: '',
+    _isNew: true,
+  }
+  tableData.value.unshift(newRow)
+  // 自动开始编辑名称
+  nextTick(() => startEdit(newRow, 'name'))
+}
+
+async function saveNewRow(row: any) {
+  if (!row.name.trim()) return ElMessage.warning('请输入服务名称')
+  
+  saving.value = true
   try {
     const data = {
-      ...form.value,
-      price: Math.round(form.value.priceYuan * 100),
+      name: row.name,
+      category: row.category,
+      price: row.price,
+      total_duration: row.total_duration,
+      staff_busy_duration: row.staff_busy_duration,
+      stages: row.stages,
+      is_active: row.is_active,
+      sort_order: row.sort_order,
+      description: row.description || '',
       merchant_id: authStore.user.merchantId,
     }
-    delete data.priceYuan
-    delete data._id
-    delete data.create_time
-    delete data.update_time
-    if (editingId.value) {
-      await serviceApi.update(editingId.value, data)
-      ElMessage.success('更新成功')
-    } else {
-      await serviceApi.create(data)
-      ElMessage.success('创建成功')
-    }
-    dialogVisible.value = false
+    await serviceApi.create(data)
+    ElMessage.success('创建成功')
     await loadData()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message || '操作失败') }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '创建失败')
+  } finally {
+    saving.value = false
+  }
 }
 
 async function deleteItem(row: any) {
   try {
-    await serviceApi.delete(row._id)
-    ElMessage.success('已删除')
+    await serviceApi.delete(row.service_id)
+    ElMessage.success('已下架')
     await loadData()
-  } catch (e: any) { ElMessage.error(e?.response?.data?.message || '删除失败') }
+  } catch (e: any) { 
+    ElMessage.error(e?.response?.data?.message || '下架失败') 
+  }
 }
 
 async function loadData() {
   loading.value = true
   try {
     const res = await serviceApi.getList({ merchant_id: authStore.user.merchantId }) as any
-    tableData.value = res?.list || (Array.isArray(res) ? res : [])
-  } catch (e) { console.error(e) }
-  finally { loading.value = false }
+    if (res?.code === 0 && Array.isArray(res.data)) {
+      tableData.value = res.data
+    } else if (Array.isArray(res)) {
+      tableData.value = res
+    } else {
+      tableData.value = []
+    }
+  } catch (e) { 
+    console.error(e)
+    tableData.value = []
+  } finally { 
+    loading.value = false 
+  }
 }
 
 onMounted(() => loadData())
 </script>
 
 <style scoped>
-.header-row { display: flex; justify-content: space-between; align-items: center; }
-.header-title { font-weight: 600; font-size: 16px; }
+.header-row { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+}
+.header-title { 
+  font-weight: 600; 
+  font-size: 16px; 
+}
+
+.cell-content {
+  min-height: 24px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.cell-content:hover {
+  background-color: #f5f7fa;
+}
+
+.action-btns {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.stages-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stage-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.stage-actions {
+  display: flex;
+  gap: 8px;
+}
+
+:deep(.el-table .el-table__cell) {
+  padding: 12px 8px;
+}
+
+:deep(.el-table__row) {
+  height: auto;
+}
+
+:deep(.el-input__wrapper) {
+  padding: 0 8px;
+}
 </style>

@@ -27,10 +27,12 @@ services:
     container_name: hair-api-dev
     working_dir: /app
     volumes:
-      # 只挂载编译后的代码和 shared 源码
-      - ./packages/server/dist/server/src:/app/packages/server/dist
-      - ./packages/shared:/app/packages/shared
+      # 挂载编译后的代码
+      - ./packages/server/dist:/app/packages/server/dist
+      - ./packages/shared/dist:/app/packages/shared/dist
       - ./package.json:/app/package.json
+      # 挂载上传文件目录，确保文件持久化
+      - ./uploads:/app/uploads
     ports:
       - "3100:3000"
     environment:

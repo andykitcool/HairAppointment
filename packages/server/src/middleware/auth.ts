@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken'
-import { UserModel, AdminModel } from '../models'
-import type { IJwtPayload } from '../../../shared/src/types'
+import { UserModel, AdminModel } from '../models/index.js'
+import type { IJwtPayload } from '../../../shared/dist/types/index.js'
 import type { Context, Next } from 'koa'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'hair-appointment-jwt-secret'
@@ -59,7 +59,7 @@ export async function authMiddleware(ctx: Context, next: Next) {
   ctx.state.user = {
     _id: user._id,
     openid: user.openid,
-    role: payload.type === 'admin' ? 'super_admin' : user.role,
+    role: user.role || payload.role,
     merchant_id: user.merchant_id,
   }
   ctx.state.jwtPayload = payload
@@ -114,7 +114,7 @@ export async function cozeAuthMiddleware(ctx: Context, next: Next) {
   }
 
   // 验证 API Key（从商户的 coze_config 中获取）
-  const { MerchantModel } = await import('../models')
+  const { MerchantModel } = await import('../models/index.js')
   const merchant = await MerchantModel.findOne({ merchant_id: merchantId })
   if (!merchant || merchant.coze_config?.api_key !== apiKey) {
     ctx.status = 401
