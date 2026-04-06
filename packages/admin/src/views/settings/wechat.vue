@@ -18,27 +18,39 @@
       />
 
       <el-table :data="configs" v-loading="loading" border>
-        <el-table-column prop="type" label="类型" width="120">
+        <el-table-column prop="type" label="类型" min-width="80">
           <template #default="{ row }">
             <el-tag :type="row.type === 'service' ? 'success' : 'primary'">
               {{ row.type === 'service' ? '服务号' : '小程序' }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="appid" label="AppID" min-width="200" />
-        <el-table-column prop="token" label="Token" width="120">
+        <el-table-column prop="appid" label="AppID" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="token" label="Token" min-width="80">
           <template #default="{ row }">
-            <el-tag v-if="row.token" type="success">已设置</el-tag>
-            <el-tag v-else type="info">未设置</el-tag>
+            <el-tag v-if="row.token" type="success" size="small">已设置</el-tag>
+            <el-tag v-else type="info" size="small">未设置</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="encoding_aes_key" label="EncodingAESKey" width="150">
+        <el-table-column prop="app_secret" label="AppSecret" min-width="90">
           <template #default="{ row }">
-            <el-tag v-if="row.encoding_aes_key" type="success">已设置</el-tag>
-            <el-tag v-else type="info">未设置</el-tag>
+            <el-tag v-if="row.app_secret" type="success" size="small">已设置</el-tag>
+            <el-tag v-else type="info" size="small">未设置</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="is_active" label="状态" width="100">
+        <el-table-column prop="encoding_aes_key" label="AESKey" min-width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.encoding_aes_key" type="success" size="small">已设置</el-tag>
+            <el-tag v-else type="info" size="small">未设置</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="upload_key" label="上传密钥" min-width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.upload_key" type="success" size="small">已设置</el-tag>
+            <el-tag v-else type="info" size="small">未设置</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="is_active" label="状态" min-width="70">
           <template #default="{ row }">
             <el-switch
               v-model="row.is_active"
@@ -46,14 +58,19 @@
             />
           </template>
         </el-table-column>
-        <el-table-column prop="update_time" label="更新时间" width="180">
+        <el-table-column prop="update_time" label="更新时间" min-width="140">
           <template #default="{ row }">
             {{ formatDate(row.update_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column label="操作" min-width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
+            <template v-if="row.type === 'mp'">
+              <el-button type="success" link @click="showUploadDialog(row)">上传代码</el-button>
+              <el-button type="warning" link @click="handleSubmit(row)">提交审核</el-button>
+              <el-button type="danger" link @click="handleRelease(row)">发布</el-button>
+            </template>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
@@ -105,10 +122,35 @@
         <el-form-item label="EncodingAESKey">
           <el-input v-model="editForm.encoding_aes_key" placeholder="请输入消息加解密密钥" />
         </el-form-item>
+        <el-form-item label="上传密钥" v-if="editForm.type === 'mp'">
+          <el-input
+            v-model="editForm.upload_key"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入小程序代码上传密钥（从微信小程序后台下载的 .key 文件内容）"
+          />
+          <div class="form-tip">用于 CI 自动上传小程序代码，在小程序后台-开发管理-开发设置-小程序代码上传中获取</div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="handleUpdate">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 上传小程序代码对话框 -->
+    <el-dialog v-model="showUploadCodeDialog" title="上传小程序代码" width="500px">
+      <el-form :model="uploadForm" ref="uploadFormRef" label-width="100px">
+        <el-form-item label="版本号" prop="version" required>
+          <el-input v-model="uploadForm.version" placeholder="如: 1.0.0" />
+        </el-form-item>
+        <el-form-item label="版本描述" prop="desc">
+          <el-input v-model="uploadForm.desc" type="textarea" :rows="3" placeholder="请输入版本描述" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showUploadCodeDialog = false">取消</el-button>
+        <el-button type="primary" :loading="uploading" @click="handleUpload">开始上传</el-button>
       </template>
     </el-dialog>
   </div>
@@ -118,6 +160,7 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { wechatConfigApi } from '@/api/request'
+import axios from 'axios'
 
 const loading = ref(false)
 const configs = ref<any[]>([])
@@ -138,7 +181,16 @@ const formRules = {
   type: [{ required: true, message: '请选择配置类型', trigger: 'change' }],
   appid: [{ required: true, message: '请输入AppID', trigger: 'blur' }],
   app_secret: [{ required: true, message: '请输入AppSecret', trigger: 'blur' }],
-  token: [{ required: true, message: '请输入Token', trigger: 'blur' }],
+  token: [{ 
+    validator: (rule: any, value: string, callback: Function) => {
+      if (createForm.type === 'service' && !value) {
+        callback(new Error('服务号必须填写Token'))
+      } else {
+        callback()
+      }
+    },
+    trigger: 'blur'
+  }],
 }
 
 // 编辑对话框
@@ -147,11 +199,23 @@ const editLoading = ref(false)
 const editFormRef = ref()
 const editForm = reactive({
   _id: '',
+  type: 'mp' as 'mp' | 'service',
   appid: '',
   app_secret: '',
   token: '',
   encoding_aes_key: '',
+  upload_key: '',
 })
+
+// 上传代码对话框
+const showUploadCodeDialog = ref(false)
+const uploadFormRef = ref()
+const uploadForm = reactive({
+  version: '',
+  desc: '',
+})
+const uploading = ref(false)
+const currentMpConfig = ref<any>(null)
 
 // 获取配置列表
 async function fetchConfigs() {
@@ -208,10 +272,12 @@ async function handleEdit(row: any) {
 
   // 重置表单
   editForm._id = ''
+  editForm.type = row.type || 'mp'
   editForm.appid = ''
   editForm.app_secret = ''
   editForm.token = ''
   editForm.encoding_aes_key = ''
+  editForm.upload_key = ''
 
   // 先打开对话框
   showEditDialog.value = true
@@ -227,10 +293,12 @@ async function handleEdit(row: any) {
 
       // 赋值表单数据
       editForm._id = config._id ? String(config._id) : ''
+      editForm.type = config.type || 'mp'
       editForm.appid = config.appid || ''
       editForm.app_secret = config.app_secret || ''
       editForm.token = config.token || ''
       editForm.encoding_aes_key = config.encoding_aes_key || ''
+      editForm.upload_key = config.upload_key || ''
 
       console.log('Edit form after assignment:', { ...editForm })
     } else {
@@ -251,8 +319,12 @@ async function handleUpdate() {
   try {
     const data: any = {}
     if (editForm.app_secret) data.app_secret = editForm.app_secret.trim()
-    if (editForm.token) data.token = editForm.token.trim()
-    if (editForm.encoding_aes_key) data.encoding_aes_key = editForm.encoding_aes_key.trim()
+    if (editForm.token !== undefined) data.token = editForm.token.trim()
+    if (editForm.encoding_aes_key !== undefined) data.encoding_aes_key = editForm.encoding_aes_key.trim()
+    if (editForm.upload_key !== undefined) data.upload_key = editForm.upload_key.trim()
+
+    console.log('Update data:', data)
+    console.log('Edit form upload_key:', editForm.upload_key)
 
     const res: any = await wechatConfigApi.update(editForm._id, data)
     if (res.code === 0) {
@@ -309,6 +381,81 @@ async function handleStatusChange(row: any, val: boolean) {
 function formatDate(date: string) {
   if (!date) return '-'
   return new Date(date).toLocaleString()
+}
+
+// 显示上传代码对话框
+function showUploadDialog(row: any) {
+  currentMpConfig.value = row
+  uploadForm.version = ''
+  uploadForm.desc = ''
+  showUploadCodeDialog.value = true
+}
+
+// 上传小程序代码
+async function handleUpload() {
+  if (!uploadForm.version) {
+    ElMessage.warning('请输入版本号')
+    return
+  }
+
+  uploading.value = true
+  try {
+    const res: any = await axios.post(
+      `/api/wechat-config/${currentMpConfig.value._id}/upload`,
+      {
+        version: uploadForm.version,
+        desc: uploadForm.desc,
+      }
+    )
+    if (res.data.code === 0) {
+      ElMessage.success('上传成功')
+      showUploadCodeDialog.value = false
+    } else {
+      ElMessage.error(res.data.message || '上传失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '上传失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+// 提交审核
+async function handleSubmit(row: any) {
+  try {
+    await ElMessageBox.confirm('确定要提交小程序审核吗？', '提示', {
+      type: 'warning',
+    })
+    const res: any = await axios.post(`/api/wechat-config/${row._id}/submit`)
+    if (res.data.code === 0) {
+      ElMessage.success('提交审核成功')
+    } else {
+      ElMessage.error(res.data.message || '提交审核失败')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.message || '提交审核失败')
+    }
+  }
+}
+
+// 发布小程序
+async function handleRelease(row: any) {
+  try {
+    await ElMessageBox.confirm('确定要发布小程序吗？发布后用户将看到新版本。', '提示', {
+      type: 'warning',
+    })
+    const res: any = await axios.post(`/api/wechat-config/${row._id}/release`)
+    if (res.data.code === 0) {
+      ElMessage.success('发布成功')
+    } else {
+      ElMessage.error(res.data.message || '发布失败')
+    }
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.message || '发布失败')
+    }
+  }
 }
 
 onMounted(() => {
