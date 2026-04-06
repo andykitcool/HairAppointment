@@ -1,37 +1,53 @@
 <template>
   <view class="container">
     <!-- ── 英雄横幅 ── -->
-    <view class="hero" :style="{ paddingTop: statusBarHeight + 'px' }">
+    <view class="hero" :style="{ height: heroHeight + 'px' }">
       <view class="hero-gradient"></view>
+      <view class="hero-noise"></view>
       <view class="hero-body">
-        <view class="hero-left">
-          <text class="hero-name">{{ merchantInfo.name }}</text>
-          <view class="hero-meta-row">
-            <text class="hero-meta-icon">📍</text>
-            <text class="hero-meta-text">{{ merchantInfo.address || '暂无地址' }}</text>
-          </view>
-          <view class="hero-meta-row">
-            <text class="hero-meta-icon">🕐</text>
-            <text class="hero-meta-text">{{ merchantInfo.business_hours?.start || '09:00' }} – {{ merchantInfo.business_hours?.end || '18:00' }}</text>
+        <view class="hero-top" :style="{ paddingTop: statusBarHeight + 6 + 'px' }">
+          <view class="hero-chip">VOGUE STUDIO</view>
+          <view class="hero-rating">
+            <text class="hero-rating-star">★</text>
+            <text class="hero-rating-score">4.9</text>
           </view>
         </view>
-        <view class="hero-staff">
-          <view class="staff-circle">
-            <text class="staff-circle-icon">✂</text>
+
+        <view class="hero-main">
+          <view class="hero-left">
+            <text class="hero-name">{{ merchantInfo.name }}</text>
+            <view class="hero-meta-row">
+              <text class="hero-meta-icon">📍</text>
+              <text class="hero-meta-text">{{ merchantInfo.address || '暂无地址' }}</text>
+            </view>
+            <view class="hero-meta-row">
+              <text class="hero-meta-icon">🕐</text>
+              <text class="hero-meta-text">{{ merchantInfo.business_hours?.start || '09:00' }} - {{ merchantInfo.business_hours?.end || '18:00' }}</text>
+            </view>
           </view>
-          <view class="staff-badge-row">
-            <text class="staff-star">★</text>
-            <text class="staff-score">4.9</text>
+
+          <view class="hero-staff">
+            <view class="staff-circle">
+              <text class="staff-circle-icon">✂</text>
+            </view>
+            <text class="staff-name">Tony</text>
+            <text class="staff-title">技术总监</text>
           </view>
-          <text class="staff-name">Tony</text>
-          <text class="staff-title">技术总监</text>
         </view>
       </view>
     </view>
 
     <!-- ── 预约项目（横向滑动卡片）── -->
     <view class="section-block">
-      <text class="section-title">预约项目</text>
+      <view class="section-head-row">
+        <text class="section-title">预约项目</text>
+        <view class="notice-wrap">
+          <view class="notice-track">
+            <text class="notice-text">迎新年全场8折</text>
+            <text class="notice-text notice-gap">迎新年全场8折</text>
+          </view>
+        </view>
+      </view>
       <scroll-view scroll-x class="svc-scroll">
         <view class="svc-row">
           <view
@@ -41,18 +57,22 @@
             :class="{ 'svc-card-on': selectedCategory?.id === svc.id }"
             @tap="onSelectCategory(svc)"
           >
-            <text class="svc-ico">{{ svc.icon }}</text>
+            <view class="svc-head">
+              <text class="svc-ico">{{ svc.icon }}</text>
+              <text class="svc-price">{{ svc.apiPrice ? '¥' + formatPrice(svc.apiPrice) : '面议' }}</text>
+            </view>
             <text class="svc-nm">{{ svc.name }}</text>
-            <text class="svc-dur">{{ svc.duration }} 分钟</text>
-            <text class="svc-price">{{ svc.apiPrice ? '¥' + formatPrice(svc.apiPrice) : '面议' }}</text>
             <text class="svc-desc">{{ svc.desc }}</text>
+            <view class="svc-foot">
+              <text class="svc-dur">约 {{ svc.duration }} 分钟</text>
+            </view>
           </view>
         </view>
       </scroll-view>
     </view>
 
     <!-- ── 到店时间（选完项目后展示）── -->
-    <view class="section-block" v-if="selectedCategory">
+    <view class="section-block">
       <view class="time-header">
         <text class="time-title">到店时间</text>
         <text class="rest-badge" v-if="restPeriod">{{ restPeriod }} 休息</text>
@@ -75,10 +95,7 @@
       </scroll-view>
 
       <!-- 时间段网格 -->
-      <view v-if="loadingSlots" class="slots-tip">
-        <text class="slots-tip-text">加载时段...</text>
-      </view>
-      <view v-else-if="slotsClosed" class="slots-tip">
+      <view v-if="slotsClosed" class="slots-tip">
         <text class="slots-tip-text">当日打烊，暂不可预约</text>
       </view>
       <view v-else-if="allSlots.length === 0" class="slots-tip">
@@ -182,10 +199,14 @@ const REST_PERIOD = '12:00-13:00'
 
 // 状态栏高度（自定义导航栏时需要）
 const statusBarHeight = ref(0)
+const heroHeight = ref(0)
 try {
-  statusBarHeight.value = uni.getSystemInfoSync().statusBarHeight || 0
+  const sys = uni.getSystemInfoSync()
+  statusBarHeight.value = sys.statusBarHeight || 0
+  heroHeight.value = Math.round((sys.windowWidth * 9) / 16)
 } catch {
   statusBarHeight.value = 0
+  heroHeight.value = 211
 }
 
 // ── 4 个预设服务分类 ──
@@ -272,17 +293,16 @@ function generateDateList() {
 }
 
 // ── 交互处理 ──
-function onSelectCategory(svc: any) {
+async function onSelectCategory(svc: any) {
   if (selectedCategory.value?.id === svc.id) return
   selectedCategory.value = svc
-  selectedTime.value = ''
-  if (selectedDate.value && merchantInfo.value.merchant_id) loadSlots()
+  if (selectedDate.value && merchantInfo.value.merchant_id) await loadSlots()
 }
 
 function selectDate(index: number) {
   selectedDateIndex.value = index
   selectedTime.value = ''
-  if (selectedCategory.value) loadSlots()
+  loadSlots()
 }
 
 function selectTime(time: string) {
@@ -302,19 +322,41 @@ async function loadSlots() {
     if (data?.closed) {
       slotsClosed.value = true
       allSlots.value = []
+      selectedTime.value = ''
     } else {
-      allSlots.value = data?.slots || []
+      const rawSlots = data?.slots || []
+      allSlots.value = rawSlots.filter((slot: any) => !isInRestPeriod(slot.start))
+      if (selectedTime.value) {
+        const keepSelectedTime = allSlots.value.some((slot: any) => {
+          return slot.start === selectedTime.value && slot.available
+        })
+        if (!keepSelectedTime) selectedTime.value = ''
+      }
     }
   } catch {
     allSlots.value = []
+    selectedTime.value = ''
   } finally {
     loadingSlots.value = false
   }
 }
 
+function isInRestPeriod(time: string): boolean {
+  const [startStr, endStr] = REST_PERIOD.split('-')
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(':').map(Number)
+    return h * 60 + m
+  }
+
+  const target = toMinutes(time)
+  const restStart = toMinutes(startStr)
+  const restEnd = toMinutes(endStr)
+  return target >= restStart && target < restEnd
+}
+
 // 每次选中日期有效时自动加载时段
 watch(selectedDate, (val) => {
-  if (val && selectedCategory.value) loadSlots()
+  if (val) loadSlots()
 })
 
 // ── 预约入口 ──
@@ -427,6 +469,7 @@ async function init() {
   } catch {
     apiServices.value = []
   }
+  await loadSlots()
 }
 
 onShow(() => { void init() })
@@ -440,15 +483,16 @@ onPullDownRefresh(async () => {
 /* ── 容器 ── */
 .container {
   min-height: 100vh;
-  background: #F5F5F5;
-  padding-bottom: 200rpx;
+  background: #F8F8F8;
+  padding-bottom: 40rpx;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif;
+  font-weight: 400;
 }
 
 /* ── 英雄横幅 ── */
 .hero {
   position: relative;
-  height: 460rpx;
-  background: #1A1A1A;
+  background: #FFFFFF;
   overflow: hidden;
 }
 
@@ -458,15 +502,71 @@ onPullDownRefresh(async () => {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(160deg, #2A2A2A 0%, #0A0A0A 100%);
+  background: linear-gradient(160deg, #F8F8F8 0%, #FFFFFF 100%);
+}
+
+.hero-noise {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1rpx, transparent 0);
+  background-size: 6rpx 6rpx;
+  opacity: 0.06;
 }
 
 .hero-body {
   position: absolute;
+  top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 0 40rpx 48rpx;
+  padding: 0 30rpx 28rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hero-chip {
+  height: 44rpx;
+  padding: 0 16rpx;
+  border-radius: 22rpx;
+  background: rgba(0, 0, 0, 0.08);
+  border: 1rpx solid rgba(0, 0, 0, 0.1);
+  color: #1A1A1A;
+  font-size: 20rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  letter-spacing: 1rpx;
+}
+
+.hero-rating {
+  display: flex;
+  align-items: center;
+  padding: 10rpx 14rpx;
+  border-radius: 18rpx;
+  background: rgba(0, 0, 0, 0.06);
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
+}
+
+.hero-rating-star {
+  color: #FFD700;
+  font-size: 22rpx;
+  margin-right: 6rpx;
+}
+
+.hero-rating-score {
+  color: #1A1A1A;
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.hero-main {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -474,22 +574,22 @@ onPullDownRefresh(async () => {
 
 .hero-left {
   flex: 1;
-  margin-right: 24rpx;
+  margin-right: 18rpx;
 }
 
 .hero-name {
   display: block;
   font-size: 48rpx;
-  font-weight: 800;
-  color: #FFFFFF;
-  letter-spacing: 2rpx;
-  margin-bottom: 18rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+  letter-spacing: 1rpx;
+  margin-bottom: 10rpx;
 }
 
 .hero-meta-row {
   display: flex;
   align-items: center;
-  margin-bottom: 8rpx;
+  margin-bottom: 6rpx;
 }
 
 .hero-meta-icon {
@@ -498,8 +598,9 @@ onPullDownRefresh(async () => {
 }
 
 .hero-meta-text {
-  font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 21rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.6);
 }
 
 /* 员工卡片 */
@@ -507,54 +608,37 @@ onPullDownRefresh(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 120rpx;
+  width: 112rpx;
 }
 
 .staff-circle {
-  width: 100rpx;
-  height: 100rpx;
+  width: 86rpx;
+  height: 86rpx;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  border: 2rpx solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 149, 0, 0.1);
+  border: 2rpx solid rgba(255, 149, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8rpx;
+  margin-bottom: 10rpx;
 }
 
 .staff-circle-icon {
-  font-size: 36rpx;
-  color: #FFFFFF;
-}
-
-.staff-badge-row {
-  display: flex;
-  align-items: center;
-  margin-bottom: 6rpx;
-}
-
-.staff-star {
-  font-size: 22rpx;
-  color: #FFD700;
-  margin-right: 4rpx;
-}
-
-.staff-score {
-  font-size: 22rpx;
-  color: #FFFFFF;
-  font-weight: 600;
+  font-size: 32rpx;
+  color: #FF9500;
 }
 
 .staff-name {
-  font-size: 24rpx;
-  font-weight: 700;
-  color: #FFFFFF;
-  margin-bottom: 2rpx;
+  font-size: 21rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  margin-bottom: 4rpx;
 }
 
 .staff-title {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 17rpx;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.5);
 }
 
 /* ── 通用区块 ── */
@@ -564,13 +648,60 @@ onPullDownRefresh(async () => {
   padding: 36rpx 0 36rpx 40rpx;
 }
 
+.section-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20rpx;
+  padding-right: 24rpx;
+}
+
 .section-title {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 700;
   color: #1A1A1A;
   display: block;
-  margin-bottom: 28rpx;
-  padding-right: 40rpx;
+  margin-bottom: 0;
+  padding-right: 12rpx;
+}
+
+.notice-wrap {
+  width: 300rpx;
+  height: 44rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
+}
+
+.notice-track {
+  height: 44rpx;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: notice-marquee 7s linear infinite;
+}
+
+.notice-text {
+  font-size: 20rpx;
+  color: #1A1A1A;
+  line-height: 44rpx;
+  font-weight: 600;
+  letter-spacing: 0.5rpx;
+}
+
+.notice-gap {
+  margin-left: 80rpx;
+}
+
+@keyframes notice-marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
 }
 
 /* ── 服务分类横滑 ── */
@@ -580,33 +711,40 @@ onPullDownRefresh(async () => {
 
 .svc-row {
   display: inline-flex;
-  padding-right: 40rpx;
+  padding-right: 24rpx;
 }
 
 .svc-card {
   display: inline-flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 220rpx;
-  min-height: 280rpx;
-  border-radius: 24rpx;
-  border: 2rpx solid #E8E8E8;
-  background: #FAFAFA;
-  margin-right: 20rpx;
-  padding: 32rpx 20rpx;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 208rpx;
+  height: 140rpx;
+  border-radius: 16rpx;
+  border: 1rpx solid #E5E5EA;
+  background: #FFFFFF;
+  margin-right: 14rpx;
+  padding: 12rpx;
   box-sizing: border-box;
 }
 
+.svc-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8rpx;
+}
+
 .svc-card-on {
-  background: #1A1A1A;
-  border-color: #1A1A1A;
+  background: #3A3A3C;
+  border-color: #3A3A3C;
 }
 
 .svc-ico {
-  font-size: 48rpx;
-  margin-bottom: 16rpx;
-  color: #1A1A1A;
+  font-size: 30rpx;
+  color: #3A3A3C;
 }
 
 .svc-card-on .svc-ico {
@@ -614,10 +752,10 @@ onPullDownRefresh(async () => {
 }
 
 .svc-nm {
-  font-size: 32rpx;
-  font-weight: 700;
+  font-size: 24rpx;
+  font-weight: 600;
   color: #1A1A1A;
-  margin-bottom: 10rpx;
+  margin-bottom: 4rpx;
 }
 
 .svc-card-on .svc-nm {
@@ -625,9 +763,9 @@ onPullDownRefresh(async () => {
 }
 
 .svc-dur {
-  font-size: 22rpx;
-  color: #999999;
-  margin-bottom: 8rpx;
+  font-size: 16rpx;
+  font-weight: 500;
+  color: #8E8E93;
 }
 
 .svc-card-on .svc-dur {
@@ -635,26 +773,39 @@ onPullDownRefresh(async () => {
 }
 
 .svc-price {
-  font-size: 26rpx;
-  font-weight: 600;
-  color: #1A1A1A;
-  margin-bottom: 12rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #FF9500;
 }
 
 .svc-card-on .svc-price {
-  color: #FFFFFF;
+  color: #FF9500;
 }
 
 .svc-desc {
-  font-size: 20rpx;
-  color: #BBBBBB;
-  text-align: center;
+  font-size: 16rpx;
+  font-weight: 500;
+  color: #8E8E93;
+  text-align: left;
   line-height: 1.4;
   white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  margin-bottom: 4rpx;
 }
 
 .svc-card-on .svc-desc {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.svc-foot {
+  margin-top: auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 /* ── 到店时间 ── */
@@ -671,13 +822,14 @@ onPullDownRefresh(async () => {
 }
 
 .time-title {
-  font-size: 32rpx;
+  font-size: 34rpx;
   font-weight: 700;
   color: #1A1A1A;
 }
 
 .rest-badge {
-  font-size: 22rpx;
+  font-size: 20rpx;
+  font-weight: 500;
   color: #999999;
   background: #F5F5F5;
   border-radius: 20rpx;
@@ -703,12 +855,12 @@ onPullDownRefresh(async () => {
   width: 96rpx;
   height: 96rpx;
   border-radius: 20rpx;
-  background: #F5F5F5;
+  background: #F5F5F7;
   margin-right: 16rpx;
 }
 
 .date-tab-on {
-  background: #1A1A1A;
+  background: #FF9500;
 }
 
 .date-tab-off {
@@ -716,7 +868,8 @@ onPullDownRefresh(async () => {
 }
 
 .date-wday {
-  font-size: 20rpx;
+  font-size: 19rpx;
+  font-weight: 500;
   color: #999999;
   margin-bottom: 4rpx;
 }
@@ -726,8 +879,8 @@ onPullDownRefresh(async () => {
 }
 
 .date-md {
-  font-size: 26rpx;
-  font-weight: 700;
+  font-size: 28rpx;
+  font-weight: 600;
   color: #1A1A1A;
 }
 
@@ -743,7 +896,8 @@ onPullDownRefresh(async () => {
 }
 
 .slots-tip-text {
-  font-size: 28rpx;
+  font-size: 24rpx;
+  font-weight: 500;
   color: #BBBBBB;
 }
 
@@ -759,7 +913,7 @@ onPullDownRefresh(async () => {
   width: calc(25% - 12rpx);
   height: 80rpx;
   border-radius: 16rpx;
-  background: #F5F5F5;
+  background: #F5F5F7;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -767,7 +921,7 @@ onPullDownRefresh(async () => {
 }
 
 .time-slot-on {
-  background: #1A1A1A;
+  background: #FF9500;
 }
 
 .time-slot-dim {
@@ -775,8 +929,8 @@ onPullDownRefresh(async () => {
 }
 
 .time-text {
-  font-size: 26rpx;
-  font-weight: 500;
+  font-size: 27rpx;
+  font-weight: 600;
   color: #1A1A1A;
 }
 
@@ -790,22 +944,23 @@ onPullDownRefresh(async () => {
 
 /* ── 底部预约按钮 ── */
 .bottom-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 20rpx 40rpx 60rpx;
-  background: #FFFFFF;
-  box-shadow: 0 -2rpx 20rpx rgba(0, 0, 0, 0.06);
+  pointer-events: none;
 }
 
 .btn-book {
-  background: #1A1A1A;
-  border-radius: 24rpx;
-  height: 96rpx;
+  position: fixed;
+  bottom: 50rpx;
+  right: 40rpx;
+  width: 148rpx;
+  height: 72rpx;
+  border-radius: 999rpx;
+  background: #FF9500;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 10rpx 26rpx rgba(255, 149, 0, 0.28);
+  z-index: 100;
+  pointer-events: auto;
 }
 
 .btn-book-dim {
@@ -813,10 +968,10 @@ onPullDownRefresh(async () => {
 }
 
 .btn-book-text {
-  font-size: 34rpx;
-  font-weight: 700;
+  font-size: 24rpx;
+  font-weight: 600;
   color: #FFFFFF;
-  letter-spacing: 4rpx;
+  letter-spacing: 1rpx;
 }
 
 /* ── 联系人弹层 ── */
@@ -856,7 +1011,7 @@ onPullDownRefresh(async () => {
 }
 
 .sheet-title {
-  font-size: 36rpx;
+  font-size: 34rpx;
   font-weight: 700;
   color: #1A1A1A;
 }
@@ -882,7 +1037,7 @@ onPullDownRefresh(async () => {
 
 .field-label {
   display: block;
-  font-size: 26rpx;
+  font-size: 24rpx;
   font-weight: 600;
   color: #1A1A1A;
   margin-bottom: 12rpx;
@@ -894,7 +1049,8 @@ onPullDownRefresh(async () => {
   background: #F8F8F8;
   border-radius: 20rpx;
   padding: 0 28rpx;
-  font-size: 30rpx;
+  font-size: 28rpx;
+  font-weight: 500;
   color: #1A1A1A;
   margin-bottom: 24rpx;
   box-sizing: border-box;
@@ -915,13 +1071,14 @@ onPullDownRefresh(async () => {
 }
 
 .summary-key {
-  font-size: 26rpx;
+  font-size: 24rpx;
+  font-weight: 500;
   color: #888888;
 }
 
 .summary-val {
-  font-size: 26rpx;
-  font-weight: 500;
+  font-size: 24rpx;
+  font-weight: 600;
   color: #1A1A1A;
 }
 

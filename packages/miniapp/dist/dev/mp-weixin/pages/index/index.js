@@ -11,10 +11,14 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     const userStore = stores_user.useUserStore();
     const merchantStore = stores_merchant.useMerchantStore();
     const statusBarHeight = common_vendor.ref(0);
+    const heroHeight = common_vendor.ref(0);
     try {
-      statusBarHeight.value = common_vendor.index.getSystemInfoSync().statusBarHeight || 0;
+      const sys = common_vendor.index.getSystemInfoSync();
+      statusBarHeight.value = sys.statusBarHeight || 0;
+      heroHeight.value = Math.round(sys.windowWidth * 9 / 16);
     } catch {
       statusBarHeight.value = 0;
+      heroHeight.value = 211;
     }
     const CATEGORIES = [
       { id: "cat_cut", name: "剪发", category: "cut", icon: "✂", duration: 45, desc: "精准剪裁，塑造完美发型" },
@@ -87,17 +91,16 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         };
       });
     }
-    function onSelectCategory(svc) {
+    async function onSelectCategory(svc) {
       var _a;
       if (((_a = selectedCategory.value) == null ? void 0 : _a.id) === svc.id) return;
       selectedCategory.value = svc;
-      selectedTime.value = "";
-      if (selectedDate.value && merchantInfo.value.merchant_id) loadSlots();
+      if (selectedDate.value && merchantInfo.value.merchant_id) await loadSlots();
     }
     function selectDate(index) {
       selectedDateIndex.value = index;
       selectedTime.value = "";
-      if (selectedCategory.value) loadSlots();
+      loadSlots();
     }
     function selectTime(time) {
       selectedTime.value = time;
@@ -116,17 +119,37 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
         if (data == null ? void 0 : data.closed) {
           slotsClosed.value = true;
           allSlots.value = [];
+          selectedTime.value = "";
         } else {
-          allSlots.value = (data == null ? void 0 : data.slots) || [];
+          const rawSlots = (data == null ? void 0 : data.slots) || [];
+          allSlots.value = rawSlots.filter((slot) => !isInRestPeriod(slot.start));
+          if (selectedTime.value) {
+            const keepSelectedTime = allSlots.value.some((slot) => {
+              return slot.start === selectedTime.value && slot.available;
+            });
+            if (!keepSelectedTime) selectedTime.value = "";
+          }
         }
       } catch {
         allSlots.value = [];
+        selectedTime.value = "";
       } finally {
         loadingSlots.value = false;
       }
     }
+    function isInRestPeriod(time) {
+      const [startStr, endStr] = REST_PERIOD.split("-");
+      const toMinutes = (t) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + m;
+      };
+      const target = toMinutes(time);
+      const restStart = toMinutes(startStr);
+      const restEnd = toMinutes(endStr);
+      return target >= restStart && target < restEnd;
+    }
     common_vendor.watch(selectedDate, (val) => {
-      if (val && selectedCategory.value) loadSlots();
+      if (val) loadSlots();
     });
     function onBook() {
       if (!canBook.value) return;
@@ -227,6 +250,7 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
       } catch {
         apiServices.value = [];
       }
+      await loadSlots();
     }
     common_vendor.onShow(() => {
       void init();
@@ -238,26 +262,25 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
     return (_ctx, _cache) => {
       var _a, _b, _c;
       return common_vendor.e({
-        a: common_vendor.t(merchantInfo.value.name),
-        b: common_vendor.t(merchantInfo.value.address || "暂无地址"),
-        c: common_vendor.t(((_a = merchantInfo.value.business_hours) == null ? void 0 : _a.start) || "09:00"),
-        d: common_vendor.t(((_b = merchantInfo.value.business_hours) == null ? void 0 : _b.end) || "18:00"),
-        e: statusBarHeight.value + "px",
-        f: common_vendor.f(displayServices.value, (svc, k0, i0) => {
+        a: statusBarHeight.value + 6 + "px",
+        b: common_vendor.t(merchantInfo.value.name),
+        c: common_vendor.t(merchantInfo.value.address || "暂无地址"),
+        d: common_vendor.t(((_a = merchantInfo.value.business_hours) == null ? void 0 : _a.start) || "09:00"),
+        e: common_vendor.t(((_b = merchantInfo.value.business_hours) == null ? void 0 : _b.end) || "18:00"),
+        f: heroHeight.value + "px",
+        g: common_vendor.f(displayServices.value, (svc, k0, i0) => {
           var _a2;
           return {
             a: common_vendor.t(svc.icon),
-            b: common_vendor.t(svc.name),
-            c: common_vendor.t(svc.duration),
-            d: common_vendor.t(svc.apiPrice ? "¥" + formatPrice(svc.apiPrice) : "面议"),
-            e: common_vendor.t(svc.desc),
+            b: common_vendor.t(svc.apiPrice ? "¥" + formatPrice(svc.apiPrice) : "面议"),
+            c: common_vendor.t(svc.name),
+            d: common_vendor.t(svc.desc),
+            e: common_vendor.t(svc.duration),
             f: svc.id,
             g: ((_a2 = selectedCategory.value) == null ? void 0 : _a2.id) === svc.id ? 1 : "",
             h: common_vendor.o(($event) => onSelectCategory(svc), svc.id)
           };
         }),
-        g: selectedCategory.value
-      }, selectedCategory.value ? common_vendor.e({
         h: restPeriod.value
       }, restPeriod.value ? {
         i: common_vendor.t(restPeriod.value)
@@ -273,9 +296,9 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
             g: common_vendor.o(($event) => !d.closed && selectDate(i), d.date)
           };
         }),
-        k: loadingSlots.value
-      }, loadingSlots.value ? {} : slotsClosed.value ? {} : allSlots.value.length === 0 ? {} : {
-        n: common_vendor.f(allSlots.value, (slot, k0, i0) => {
+        k: slotsClosed.value
+      }, slotsClosed.value ? {} : allSlots.value.length === 0 ? {} : {
+        m: common_vendor.f(allSlots.value, (slot, k0, i0) => {
           return {
             a: common_vendor.t(slot.start),
             b: slot.start,
@@ -285,25 +308,23 @@ const _sfc_main = /* @__PURE__ */ common_vendor.defineComponent({
           };
         })
       }, {
-        l: slotsClosed.value,
-        m: allSlots.value.length === 0
-      }) : {}, {
-        o: !canBook.value ? 1 : "",
-        p: common_vendor.o(onBook),
-        q: showSheet.value
+        l: allSlots.value.length === 0,
+        n: !canBook.value ? 1 : "",
+        o: common_vendor.o(onBook),
+        p: showSheet.value
       }, showSheet.value ? {
+        q: common_vendor.o(($event) => showSheet.value = false),
         r: common_vendor.o(($event) => showSheet.value = false),
-        s: common_vendor.o(($event) => showSheet.value = false),
-        t: contactName.value,
-        v: common_vendor.o(($event) => contactName.value = $event.detail.value),
-        w: contactPhone.value,
-        x: common_vendor.o(($event) => contactPhone.value = $event.detail.value),
-        y: common_vendor.t((_c = selectedCategory.value) == null ? void 0 : _c.name),
-        z: common_vendor.t(selectedDateShort.value),
-        A: common_vendor.t(selectedTime.value),
-        B: common_vendor.t(submitting.value ? "提交中..." : "确认预约"),
-        C: submitting.value ? 1 : "",
-        D: common_vendor.o(onSubmit)
+        s: contactName.value,
+        t: common_vendor.o(($event) => contactName.value = $event.detail.value),
+        v: contactPhone.value,
+        w: common_vendor.o(($event) => contactPhone.value = $event.detail.value),
+        x: common_vendor.t((_c = selectedCategory.value) == null ? void 0 : _c.name),
+        y: common_vendor.t(selectedDateShort.value),
+        z: common_vendor.t(selectedTime.value),
+        A: common_vendor.t(submitting.value ? "提交中..." : "确认预约"),
+        B: submitting.value ? 1 : "",
+        C: common_vendor.o(onSubmit)
       } : {});
     };
   }
