@@ -56,11 +56,13 @@ export async function authMiddleware(ctx: Context, next: Next) {
     return
   }
 
+  const resolvedMerchantId = user.merchant_id || payload.merchant_id || ''
+
   ctx.state.user = {
     _id: user._id,
     openid: user.openid,
     role: user.role || payload.role,
-    merchant_id: user.merchant_id,
+    merchant_id: resolvedMerchantId,
   }
   ctx.state.jwtPayload = payload
 
@@ -126,4 +128,18 @@ export async function cozeAuthMiddleware(ctx: Context, next: Next) {
   ctx.state.merchant = merchant
 
   await next()
+}
+
+/**
+ * 店长后台或 COZE 二选一认证
+ * 优先使用后台 Bearer Token；没有 Bearer Token 时回退到 COZE API Key。
+ */
+export async function ownerOrCozeAuthMiddleware(ctx: Context, next: Next) {
+  const authHeader = ctx.headers.authorization
+
+  if (authHeader?.startsWith('Bearer ')) {
+    return authMiddleware(ctx, async () => requireOwner(ctx, next))
+  }
+
+  return cozeAuthMiddleware(ctx, next)
 }

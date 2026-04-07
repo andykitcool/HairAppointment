@@ -133,8 +133,9 @@ async function loadData() {
       params.status = filterStatus.value
     }
     const res = await adminApi.getApplications(params) as any
-    tableData.value = res?.list || (Array.isArray(res) ? res : [])
-    total.value = res?.total || tableData.value.length
+    const payload = res?.data ?? res
+    tableData.value = payload?.list || (Array.isArray(payload) ? payload : [])
+    total.value = payload?.total ?? tableData.value.length
   } catch (e) { console.error(e) }
   finally { loading.value = false }
 }

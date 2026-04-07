@@ -1,6 +1,6 @@
 import Router from 'koa-router'
-import * as feishuController from '../controllers/feishu'
-import { cozeAuthMiddleware } from '../middleware/auth'
+import * as feishuController from '../controllers/feishu.js'
+import { cozeAuthMiddleware } from '../middleware/auth.js'
 
 const router = new Router({ prefix: '/api/feishu' })
 

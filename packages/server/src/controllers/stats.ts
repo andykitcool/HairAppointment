@@ -1,5 +1,5 @@
 import { Context } from 'koa'
-import { TransactionModel, AppointmentModel } from '../models'
+import { TransactionModel, AppointmentModel } from '../models/index.js'
 
 /**
  * 营收统计

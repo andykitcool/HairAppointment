@@ -38,6 +38,7 @@ export const authApi = {
   getAdminProfile: () => http.get('/auth/admin/profile'),
   changePassword: (data: { old_password: string; new_password: string }) => http.put('/auth/admin/password', data),
   bindPhone: (data: { phone: string; code: string }) => http.put('/auth/admin/phone', data),
+  bindEmail: (data: { email: string }) => http.put('/auth/admin/email', data),
   bindWechat: (data: { code: string }) => http.put('/auth/admin/wechat', data),
   // 微信扫码登录
   getWechatLoginQR: () => http.get('/auth/wechat-login-qr'),
@@ -72,6 +73,7 @@ export const transactionApi = {
   create: (data: any) => http.post('/transactions', data),
   getById: (id: string) => http.get(`/transactions/${id}`),
   update: (id: string, data: any) => http.put(`/transactions/${id}`, data),
+  delete: (id: string) => http.delete(`/transactions/${id}`),
 }
 
 export const serviceApi = {
@@ -81,19 +83,30 @@ export const serviceApi = {
   delete: (id: string) => http.delete(`/services/${id}`),
 }
 
+export const staffApi = {
+  getList: (params?: any) => http.get('/staff', { params }),
+  create: (data: any) => http.post('/staff', data),
+  update: (id: string, data: any) => http.put(`/staff/${id}`, data),
+  delete: (id: string, params?: any) => http.delete(`/staff/${id}`, { params }),
+}
+
 export const merchantApi = {
   getInfo: (id: string) => http.get(`/merchants/${id}`),
   update: (id: string, data: any) => http.put(`/merchants/${id}`, data),
-  getClosedPeriods: (id: string, params?: any) => http.get(`/merchants/${id}/closed-periods`, { params }),
-  createClosedPeriod: (id: string, data: any) => http.post(`/merchants/${id}/closed-periods`, data),
-  deleteClosedPeriod: (merchantId: string, periodId: string) => http.delete(`/merchants/${merchantId}/closed-periods/${periodId}`),
-  setExtendedHours: (merchantId: string, data: any) => http.post(`/merchants/${merchantId}/extended-hours`, data),
-  updateExtendedHours: (merchantId: string, index: number, data: any) => http.put(`/merchants/${merchantId}/extended-hours/${index}`, data),
-  deleteExtendedHours: (merchantId: string, index: number) => http.delete(`/merchants/${merchantId}/extended-hours/${index}`),
+  getDisplaySettings: (id: string) => http.get(`/merchants/${id}/display-settings`),
+  updateDisplaySettings: (id: string, data: any) => http.put(`/merchants/${id}/display-settings`, data),
+  getCustomerSettings: (id: string) => http.get(`/merchants/${id}/customer-settings`),
+  updateCustomerSettings: (id: string, data: any) => http.put(`/merchants/${id}/customer-settings`, data),
+}
+
+export const backupApi = {
+  sendMerchantBackup: (id: string) => http.post(`/merchants/${id}/backup/send-email`),
 }
 
 export const customerApi = {
   getList: (params?: any) => http.get('/customers', { params }),
+  update: (id: string, data: any) => http.put(`/customers/${id}`, data),
+  delete: (id: string) => http.delete(`/customers/${id}`),
   updateMerchantNote: (id: string, note: string) => http.put(`/customers/${id}/merchant-note`, { merchant_note: note }),
 }
 
@@ -118,6 +131,26 @@ export const adminApi = {
   // 入驻审核
   getApplications: (params?: any) => http.get('/admin/applications', { params }),
   reviewApplication: (id: string, action: 'approve' | 'reject', note?: string) => http.post(`/admin/merchants/${id}/review`, { action, note }),
+
+  // 店长管理
+  getOwners: (params?: any) => http.get('/admin/owners', { params }),
+  addOwner: (data: any) => http.post('/admin/owners', data),
+  updateOwner: (userId: string, data: any) => http.put(`/admin/owners/${userId}`, data),
+  removeOwner: (userId: string) => http.delete(`/admin/owners/${userId}`),
+
+  // 平台广告
+  getAds: (params?: any) => http.get('/admin/ads', { params }),
+  createAd: (data: any) => http.post('/admin/ads', data),
+  updateAd: (id: string, data: any) => http.put(`/admin/ads/${id}`, data),
+  deleteAd: (id: string) => http.delete(`/admin/ads/${id}`),
+
+  // 平台 COZE 配置
+  getPlatformCoze: () => http.get('/admin/platform-coze'),
+  updatePlatformCoze: (data: any) => http.put('/admin/platform-coze', data),
+
+  // 系统邮件配置
+  getSystemEmailConfig: () => http.get('/admin/system-email'),
+  updateSystemEmailConfig: (data: any) => http.put('/admin/system-email', data),
 
   // 平台统计
   getPlatformStats: () => http.get('/admin/stats'),

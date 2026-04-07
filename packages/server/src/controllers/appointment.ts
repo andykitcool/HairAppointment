@@ -1,8 +1,67 @@
 import { Context } from 'koa'
-import { AppointmentModel, ServiceModel, StaffModel, MerchantModel, ShopClosedPeriodModel, TransactionModel, UserModel } from '../models'
-import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateAppointmentId, generateTimeSlots, formatDate } from '../../../shared/src/index'
-import { AppointmentStatus } from '../../../shared/src/index'
-import { generateAppointmentId as genAptId } from '../../../shared/src/index'
+import { AdminModel, AppointmentModel, ServiceModel, StaffModel, MerchantModel, TransactionModel, UserModel } from '../models/index.js'
+import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateAppointmentId, generateTimeSlots, formatDate } from '../../../shared/dist/index.js'
+import { AppointmentStatus } from '../../../shared/dist/index.js'
+import { generateAppointmentId as genAptId } from '../../../shared/dist/index.js'
+
+const WEEK_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
+
+async function resolveOwnerRealName(ownerId?: string, fallbackName?: string) {
+  if (!ownerId) return fallbackName || '店长'
+  const ownerAdmin = await AdminModel.findById(ownerId).lean()
+  return ownerAdmin?.real_name || fallbackName || '店长'
+}
+
+async function normalizeAppointmentStaffName(appointment: any) {
+  if (!appointment?.merchant_id || !appointment?.staff_id) return appointment
+
+  const merchant = await MerchantModel.findOne({ merchant_id: appointment.merchant_id }).lean()
+  if (!merchant) return appointment
+
+  const defaultOwnerStaffId = merchant.owner_id || `${appointment.merchant_id}_owner`
+  if (appointment.staff_id !== defaultOwnerStaffId) return appointment
+
+  const ownerName = await resolveOwnerRealName(merchant.owner_id, merchant.name)
+  return {
+    ...appointment,
+    staff_name: ownerName,
+  }
+}
+
+function getBusinessIntervalsForDate(date: string, businessHours: any): Array<{ start: string; end: string }> {
+  if (!businessHours || typeof businessHours !== 'object') {
+    return [{ start: '09:00', end: '21:00' }]
+  }
+
+  const day = new Date(date)
+  if (Number.isNaN(day.getTime())) {
+    return [{ start: '09:00', end: '21:00' }]
+  }
+  const dayKey = WEEK_KEYS[day.getDay()]
+  const dayConfig = businessHours[dayKey]
+  if (!dayConfig || dayConfig.is_open === false) {
+    return []
+  }
+
+  const intervals: Array<{ start: string; end: string }> = []
+  const slots = ['morning', 'afternoon', 'evening']
+  for (const slotKey of slots) {
+    const slot = dayConfig[slotKey]
+    if (!slot || slot.is_open === false || !slot.open || !slot.close) continue
+    if (timeToMinutes(slot.open) >= timeToMinutes(slot.close)) continue
+    intervals.push({ start: slot.open, end: slot.close })
+  }
+  if (intervals.length > 0) {
+    return intervals
+  }
+
+  // 兼容旧版结构
+  if (typeof businessHours.start === 'string' && typeof businessHours.end === 'string') {
+    return [{ start: businessHours.start, end: businessHours.end }]
+  }
+
+  return intervals
+}
 
 /**
  * 查询可用时间段
@@ -22,39 +81,21 @@ export async function getAvailableSlots(ctx: Context) {
       return
     }
 
-    // 检查全天打烊
-    const fullDayClosed = await ShopClosedPeriodModel.findOne({
-      merchant_id,
-      date,
-      type: 'full_day',
-    })
-    if (fullDayClosed) {
-      ctx.body = { code: 0, message: 'ok', data: { slots: [], closed: true } }
+    const businessIntervals = getBusinessIntervalsForDate(date, merchant.business_hours)
+    if (businessIntervals.length === 0) {
+      ctx.body = { code: 0, message: 'ok', data: { slots: [], closed: true, business_hours: null } }
       return
     }
 
-    // 计算有效营业时间（含延长）
-    let endHour = merchant.business_hours.end
-    if (merchant.extended_hours) {
-      const ext = merchant.extended_hours.find(
-        (e) => date >= e.start_date && date <= e.end_date,
-      )
-      if (ext && ext.extended_end > endHour) {
-        endHour = ext.extended_end
-      }
-    }
+    const finalIntervals = [...businessIntervals]
 
-    // 获取段打烊
-    const timeRanges = await ShopClosedPeriodModel.find({
-      merchant_id,
-      date,
-      type: 'time_range',
-    })
+    const primaryStaff = await StaffModel.findOne({ merchant_id, is_active: true }).sort({ create_time: 1 })
+    const resolvedStaffId = staff_id || primaryStaff?.staff_id || merchant.owner_id || `${merchant_id}_owner`
 
     // 获取该发型师当天已有预约
     const existingAppointments = await AppointmentModel.find({
       merchant_id,
-      staff_id: staff_id || merchant.owner_id,
+      staff_id: resolvedStaffId,
       date,
       status: { $in: ['confirmed', 'in_progress'] },
     })
@@ -66,20 +107,12 @@ export async function getAvailableSlots(ctx: Context) {
       if (service) serviceDuration = service.total_duration
     }
 
-    // 生成时间 slots（每 15 分钟一个）
-    const slots = generateTimeSlots(merchant.business_hours.start, endHour, 15)
+    // 生成时间 slots（每 30 分钟一个）
+    const slots = finalIntervals.flatMap((itv) => generateTimeSlots(itv.start, itv.end, 30))
 
     // 标记每个 slot 是否可用
     const availableSlots = slots.map((slot) => {
       let available = true
-
-      // 检查是否在段打烊时间内
-      for (const range of timeRanges) {
-        if (isTimeOverlap(slot.start, slot.end, range.start_time!, range.end_time!)) {
-          available = false
-          break
-        }
-      }
 
       // 检查是否与已有预约冲突
       if (available) {
@@ -116,7 +149,7 @@ export async function getAvailableSlots(ctx: Context) {
     ctx.body = {
       code: 0,
       message: 'ok',
-      data: { slots: availableSlots, closed: false, business_hours: { start: merchant.business_hours.start, end: endHour } },
+      data: { slots: availableSlots, closed: false, business_hours: finalIntervals },
     }
   } catch (err: any) {
     ctx.status = 500
@@ -151,8 +184,9 @@ export async function createAppointment(ctx: Context) {
 
     // 获取发型师（Phase 1 默认店长本人）
     const staff = await StaffModel.findOne({ merchant_id, is_active: true }).sort({ create_time: 1 })
-    const staffId = staff?.staff_id || ''
-    const staffName = staff?.name || merchant.name
+    const staffId = staff?.staff_id || merchant.owner_id || `${merchant_id}_owner`
+    const ownerName = await resolveOwnerRealName(merchant.owner_id, merchant.name)
+    const staffName = staff?.name || ownerName
 
     // 生成时间线
     const timeline = generateTimeline(service.stages.map(s => ({ name: s.name, duration: s.duration, staff_busy: s.staff_busy })), start_time)
@@ -244,11 +278,19 @@ export async function createAppointment(ctx: Context) {
 export async function getAppointments(ctx: Context) {
   const { merchant_id, date, status, page = '1', pageSize = '20' } = ctx.query as any
   const user = ctx.state.user
+  const role = user?.role || ''
 
   const query: Record<string, any> = {}
   if (merchant_id) query.merchant_id = merchant_id
   else if (user.merchant_id) query.merchant_id = user.merchant_id
-  else query.customer_id = user._id
+  else if (role === 'super_admin') {
+    // 超管未指定 merchant_id 时查看全量预约
+  } else if (['owner', 'merchant_admin', 'admin', 'staff'].includes(role)) {
+    ctx.body = { code: 400, message: '当前账号未绑定门店', data: null }
+    return
+  } else {
+    query.customer_id = user._id
+  }
 
   if (date) query.date = date
   if (status) query.status = status
@@ -259,10 +301,12 @@ export async function getAppointments(ctx: Context) {
     .skip((Number(page) - 1) * Number(pageSize))
     .limit(Number(pageSize))
 
+  const normalizedList = await Promise.all(list.map((item: any) => normalizeAppointmentStaffName(item.toObject ? item.toObject() : item)))
+
   ctx.body = {
     code: 0,
     message: 'ok',
-    data: { list, total, page: Number(page), pageSize: Number(pageSize) },
+    data: { list: normalizedList, total, page: Number(page), pageSize: Number(pageSize) },
   }
 }
 
@@ -278,7 +322,8 @@ export async function getAppointmentDetail(ctx: Context) {
     return
   }
 
-  ctx.body = { code: 0, message: 'ok', data: apt }
+  const normalizedAppointment = await normalizeAppointmentStaffName(apt.toObject ? apt.toObject() : apt)
+  ctx.body = { code: 0, message: 'ok', data: normalizedAppointment }
 }
 
 /**
@@ -433,14 +478,17 @@ export async function walkIn(ctx: Context) {
   const seqNum = incremented?.daily_counter || 1
 
   const staff = await StaffModel.findOne({ merchant_id, is_active: true }).sort({ create_time: 1 })
+  const defaultStaffId = staff?.staff_id || merchant?.owner_id || `${merchant_id}_owner`
+  const ownerName = await resolveOwnerRealName(merchant?.owner_id, merchant?.name)
+  const defaultStaffName = staff?.name || ownerName
 
   const apt = await AppointmentModel.create({
     appointment_id: `${prefix}-${String(seqNum).padStart(3, '0')}`,
     merchant_id,
     customer_name: customer_name || '散客',
     customer_phone,
-    staff_id: staff?.staff_id || '',
-    staff_name: staff?.name || '',
+    staff_id: defaultStaffId,
+    staff_name: defaultStaffName,
     service_id: service.service_id,
     service_name: service.name,
     date,
@@ -460,7 +508,8 @@ export async function walkIn(ctx: Context) {
  */
 export async function startService(ctx: Context) {
   const { id } = ctx.params
-  const { duration } = ctx.request.body as any
+  const body = (ctx.request.body as any) || {}
+  const { duration } = body
 
   const apt = await AppointmentModel.findOne({ appointment_id: id })
   if (!apt) {
@@ -511,7 +560,8 @@ export async function startService(ctx: Context) {
  */
 export async function completeService(ctx: Context) {
   const { id } = ctx.params
-  const { total_amount, payment_method, items, note } = ctx.request.body as any
+  const body = (ctx.request.body as any) || {}
+  const { total_amount, payment_method, items, note } = body
 
   const apt = await AppointmentModel.findOne({ appointment_id: id })
   if (!apt) {

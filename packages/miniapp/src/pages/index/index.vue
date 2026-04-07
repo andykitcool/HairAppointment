@@ -1,37 +1,42 @@
 <template>
   <view class="container">
-    <!-- ── 英雄横幅 ── -->
-    <view class="hero" :style="{ height: heroHeight + 'px' }">
-      <view class="hero-gradient"></view>
-      <view class="hero-noise"></view>
-      <view class="hero-body">
-        <view class="hero-top" :style="{ paddingTop: statusBarHeight + 6 + 'px' }">
-          <view class="hero-chip">VOGUE STUDIO</view>
-          <view class="hero-rating">
-            <text class="hero-rating-star">★</text>
-            <text class="hero-rating-score">4.9</text>
+    <!-- ── 门店卡片 ── -->
+    <view class="merchant-card">
+      <view
+        class="merchant-card-inner"
+        :style="{
+          paddingTop: statusBarHeight + 12 + 'px',
+          backgroundImage: displaySettings.hero_image ? `url(${displaySettings.hero_image})` : 'none',
+        }"
+      >
+        <view class="merchant-card-mask" :style="heroMaskStyle"></view>
+        <view class="merchant-card-left">
+          <view class="merchant-name-row" @tap="openMerchantPicker">
+            <text class="merchant-name">{{ merchantInfo.merchant_id ? merchantInfo.name : '初始化中...' }}</text>
+            <view class="merchant-switch-btn" :style="themeSoftBgStyle">
+              <text class="merchant-switch-icon" :style="themeTextStyle">⇄</text>
+            </view>
+          </view>
+          <view class="merchant-addr-row" v-if="merchantInfo.address">
+            <text class="merchant-meta-icon">📍</text>
+            <text class="merchant-meta-text">{{ merchantInfo.address }}</text>
+          </view>
+          <view class="merchant-hours-row">
+            <text class="merchant-meta-icon">🕐</text>
+            <text class="merchant-meta-text">{{ todayBusinessLabel }}</text>
           </view>
         </view>
-
-        <view class="hero-main">
-          <view class="hero-left">
-            <text class="hero-name">{{ merchantInfo.name }}</text>
-            <view class="hero-meta-row">
-              <text class="hero-meta-icon">📍</text>
-              <text class="hero-meta-text">{{ merchantInfo.address || '暂无地址' }}</text>
-            </view>
-            <view class="hero-meta-row">
-              <text class="hero-meta-icon">🕐</text>
-              <text class="hero-meta-text">{{ merchantInfo.business_hours?.start || '09:00' }} - {{ merchantInfo.business_hours?.end || '18:00' }}</text>
-            </view>
+        <!-- 右侧：头像在上，称呼+电话在下 -->
+        <view class="merchant-card-right">
+          <image v-if="displaySettings.owner_avatar" class="owner-avatar-lg" :src="displaySettings.owner_avatar" mode="aspectFill" />
+          <view v-else class="owner-avatar-lg owner-avatar-placeholder-lg" :style="themeSoftBgStyle">
+            <text class="owner-avatar-placeholder-text" :style="themeTextStyle">店</text>
           </view>
-
-          <view class="hero-staff">
-            <view class="staff-circle">
-              <text class="staff-circle-icon">✂</text>
+          <view class="owner-bottom-row">
+            <text class="owner-title">{{ displaySettings.owner_title || '店长' }}</text>
+            <view class="phone-action" :style="themeSoftBgStyle" @tap="onCallMerchant">
+              <text class="phone-icon" :style="themeTextStyle">☎</text>
             </view>
-            <text class="staff-name">Tony</text>
-            <text class="staff-title">技术总监</text>
           </view>
         </view>
       </view>
@@ -43,18 +48,22 @@
         <text class="section-title">预约项目</text>
         <view class="notice-wrap">
           <view class="notice-track">
-            <text class="notice-text">迎新年全场8折</text>
-            <text class="notice-text notice-gap">迎新年全场8折</text>
+            <text class="notice-text">{{ marqueeText }}</text>
+            <text class="notice-text notice-gap">{{ marqueeText }}</text>
           </view>
         </view>
+      </view>
+      <view v-if="displayServices.length === 0" class="slots-tip">
+        <text class="slots-tip-text">暂无可预约服务，请联系门店配置</text>
       </view>
       <scroll-view scroll-x class="svc-scroll">
         <view class="svc-row">
           <view
             v-for="svc in displayServices"
-            :key="svc.id"
+            :key="svc.service_id"
             class="svc-card"
-            :class="{ 'svc-card-on': selectedCategory?.id === svc.id }"
+            :class="{ 'svc-card-on': selectedCategory?.service_id === svc.service_id }"
+            :style="selectedCategory?.service_id === svc.service_id ? selectedServiceCardStyle : null"
             @tap="onSelectCategory(svc)"
           >
             <view class="svc-head">
@@ -72,10 +81,10 @@
     </view>
 
     <!-- ── 到店时间（选完项目后展示）── -->
-    <view class="section-block">
+    <view id="time-section" class="section-block">
       <view class="time-header">
         <text class="time-title">到店时间</text>
-        <text class="rest-badge" v-if="restPeriod">{{ restPeriod }} 休息</text>
+        <text class="rest-badge" v-if="restPeriodsText">{{ restPeriodsText }} 休息</text>
       </view>
 
       <!-- 日期横向选择 -->
@@ -86,6 +95,7 @@
             :key="d.date"
             class="date-tab"
             :class="{ 'date-tab-on': selectedDateIndex === i, 'date-tab-off': d.closed }"
+            :style="selectedDateIndex === i ? selectedDateStyle : null"
             @tap="!d.closed && selectDate(i)"
           >
             <text class="date-wday">{{ d.weekday }}</text>
@@ -101,15 +111,21 @@
       <view v-else-if="allSlots.length === 0" class="slots-tip">
         <text class="slots-tip-text">暂无可用时段</text>
       </view>
-      <view v-else class="time-grid">
-        <view
-          v-for="slot in allSlots"
-          :key="slot.start"
-          class="time-slot"
-          :class="{ 'time-slot-on': selectedTime === slot.start, 'time-slot-dim': !slot.available }"
-          @tap="slot.available && selectTime(slot.start)"
-        >
-          <text class="time-text">{{ slot.start }}</text>
+      <view v-else class="time-groups">
+        <view v-for="group in groupedSlots" :key="group.start" class="time-group">
+          <text v-if="groupedSlots.length > 1" class="time-group-label">{{ group.label }}</text>
+          <view class="time-grid">
+            <view
+              v-for="slot in group.slots"
+              :key="slot.start"
+              class="time-slot"
+              :class="{ 'time-slot-on': selectedTime === slot.start, 'time-slot-dim': !slot.available }"
+              :style="selectedTime === slot.start ? selectedTimeStyle : null"
+              @tap="slot.available && selectTime(slot.start)"
+            >
+              <text class="time-text">{{ slot.start }}</text>
+            </view>
+          </view>
         </view>
       </view>
     </view>
@@ -122,6 +138,7 @@
     <view
       class="btn-book"
       :class="{ 'btn-book-dim': !canBook }"
+      :style="bookButtonStyle"
       @tap="onBook"
     >
       <text class="btn-book-text">预约</text>
@@ -182,40 +199,139 @@
       </view>
     </view>
   </view>
+
+  <!-- ── 选店弹层 ── -->
+  <view v-if="showMerchantPicker" class="picker-wrap">
+    <view class="picker-mask" @tap="closeMerchantPicker"></view>
+    <view class="picker-dialog">
+      <view class="picker-head">
+        <text class="picker-title">选择门店</text>
+        <view class="picker-close" @tap="closeMerchantPicker">
+          <text class="picker-close-text">✕</text>
+        </view>
+      </view>
+
+      <!-- 搜索框 -->
+      <view class="picker-search-wrap">
+        <input
+          class="picker-search-input"
+          v-model="pickerSearch"
+          placeholder="搜索门店名称"
+          placeholder-class="picker-search-ph"
+          @input="onPickerSearch"
+          @confirm="onPickerSearch"
+        />
+      </view>
+
+      <scroll-view class="picker-scroll" scroll-y="true">
+        <!-- 当前门店 -->
+        <view v-if="merchantInfo.merchant_id && !pickerSearch.trim()" class="picker-section">
+          <text class="picker-section-title">当前门店</text>
+          <view class="picker-item picker-item-active">
+            <view class="picker-item-left">
+              <text class="picker-item-name">{{ merchantInfo.name }}</text>
+              <text class="picker-item-addr">{{ merchantInfo.address || '' }}</text>
+            </view>
+            <text class="picker-item-check">✓</text>
+          </view>
+        </view>
+
+        <!-- 搜索结果 -->
+        <view v-if="pickerSearch.trim()" class="picker-section">
+          <text class="picker-section-title">搜索结果</text>
+          <view v-if="pickerSearchLoading" class="picker-loading">
+            <text class="picker-loading-text">搜索中...</text>
+          </view>
+          <view v-else-if="pickerSearchList.length === 0" class="picker-empty">
+            <text class="picker-empty-text">未找到相关门店</text>
+          </view>
+          <view
+            v-for="m in pickerSearchList"
+            :key="m.merchant_id"
+            class="picker-item"
+            :class="{ 'picker-item-active': m.merchant_id === merchantInfo.merchant_id }"
+            @tap="onSelectMerchant(m)"
+          >
+            <view class="picker-item-left">
+              <text class="picker-item-name">{{ m.name }}</text>
+              <text class="picker-item-addr">{{ m.address || '' }}</text>
+            </view>
+            <text v-if="m.merchant_id === merchantInfo.merchant_id" class="picker-item-check">✓</text>
+          </view>
+        </view>
+
+        <!-- 附近门店 -->
+        <view v-if="!pickerSearch.trim()" class="picker-section">
+          <text class="picker-section-title">附近 3km 门店</text>
+          <view v-if="pickerNearbyLoading" class="picker-loading">
+            <text class="picker-loading-text">获取位置中...</text>
+          </view>
+          <view v-else-if="pickerLocationDenied" class="picker-empty">
+            <text class="picker-empty-text">未授权定位，可通过搜索找到门店</text>
+          </view>
+          <view v-else-if="pickerNearbyList.length === 0" class="picker-empty">
+            <text class="picker-empty-text">3km 内暂无其他门店</text>
+          </view>
+          <view
+            v-for="m in pickerNearbyList"
+            :key="m.merchant_id"
+            class="picker-item"
+            :class="{ 'picker-item-active': m.merchant_id === merchantInfo.merchant_id }"
+            @tap="onSelectMerchant(m)"
+          >
+            <view class="picker-item-left">
+              <text class="picker-item-name">{{ m.name }}</text>
+              <text class="picker-item-addr">{{ m.address || '' }}</text>
+            </view>
+            <view class="picker-item-right">
+              <text v-if="m.distance !== undefined" class="picker-item-dist">{{ m.distance < 1 ? (m.distance * 1000).toFixed(0) + 'm' : m.distance.toFixed(1) + 'km' }}</text>
+              <text v-if="m.merchant_id === merchantInfo.merchant_id" class="picker-item-check">✓</text>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { onShow, onPullDownRefresh } from '@dcloudio/uni-app'
-import { serviceApi, appointmentApi, merchantApi, authApi } from '@/api/request'
+import { ref, computed, watch, nextTick } from 'vue'
+import { onShow, onPullDownRefresh, onLoad, onShareAppMessage, onShareTimeline } from '@dcloudio/uni-app'
+import { serviceApi, appointmentApi, merchantApi, authApi, request } from '@/api/request'
 import { useUserStore } from '@/stores/user'
 import { useMerchantStore } from '@/stores/merchant'
 
 const userStore = useUserStore()
 const merchantStore = useMerchantStore()
 
-const DEFAULT_MERCHANT_ID = 'M_mock_001'
-const REST_PERIOD = '12:00-13:00'
+const DEFAULT_MERCHANT_ID = 'M000001'
+const incomingMerchantId = ref('')
+const incomingServiceId = ref('')
 
 // 状态栏高度（自定义导航栏时需要）
 const statusBarHeight = ref(0)
-const heroHeight = ref(0)
 try {
   const sys = uni.getSystemInfoSync()
   statusBarHeight.value = sys.statusBarHeight || 0
-  heroHeight.value = Math.round((sys.windowWidth * 9) / 16)
 } catch {
   statusBarHeight.value = 0
-  heroHeight.value = 211
 }
 
-// ── 4 个预设服务分类 ──
-const CATEGORIES = [
-  { id: 'cat_cut',  name: '剪发', category: 'cut',  icon: '✂', duration: 45,  desc: '精准剪裁，塑造完美发型' },
-  { id: 'cat_perm', name: '烫发', category: 'perm', icon: '〜', duration: 120, desc: '持久定型，自然蓬松质感' },
-  { id: 'cat_dye',  name: '染发', category: 'dye',  icon: '◉', duration: 90,  desc: '潮流色系，呵护发质光泽' },
-  { id: 'cat_care', name: '养护', category: 'care', icon: '❋', duration: 60,  desc: '深层修护，锁水润泽养发' },
-]
+const CATEGORY_ICON_MAP: Record<string, string> = {
+  cut: '✂',
+  perm: '〜',
+  dye: '◉',
+  care: '❋',
+  wash: '◌',
+}
+
+const displaySettings = ref({
+  hero_image: '',
+  owner_avatar: '',
+  owner_title: '店长',
+  theme_color: '#1890ff',
+  welcome_text: '欢迎预约，我们将为您提供专业服务',
+})
 
 const merchantInfo = ref<any>({
   merchant_id: '', name: '黑白造型工作室',
@@ -225,18 +341,17 @@ const merchantInfo = ref<any>({
 
 const apiServices = ref<any[]>([])
 
-// 将 API 服务映射到4个固定分类上
+// 直接使用后台服务管理内容
 const displayServices = computed(() =>
-  CATEGORIES.map(cat => {
-    const matched = apiServices.value.find((s: any) => s.category === cat.category)
-    return {
-      ...cat,
-      service_id: matched?.service_id || cat.id,
-      apiPrice: matched?.price ?? null,
-      duration: matched?.total_duration ?? cat.duration,
-      desc: matched?.description || cat.desc,
-    }
-  })
+  apiServices.value.map((svc: any) => ({
+    service_id: svc.service_id,
+    category: svc.category,
+    icon: CATEGORY_ICON_MAP[svc.category] || '✦',
+    name: svc.name || '服务项目',
+    apiPrice: svc.price ?? null,
+    duration: Number(svc.total_duration || 30),
+    desc: svc.description || '专业服务',
+  }))
 )
 
 // 已选服务分类
@@ -246,6 +361,7 @@ const selectedCategory = ref<any>(null)
 const dateList = ref<any[]>([])
 const selectedDateIndex = ref(0)
 const allSlots = ref<any[]>([])
+const businessIntervals = ref<Array<{ start: string; end: string }>>([])
 const selectedTime = ref('')
 const loadingSlots = ref(false)
 const slotsClosed = ref(false)
@@ -256,13 +372,59 @@ const contactName = ref('')
 const contactPhone = ref('')
 const submitting = ref(false)
 
+// ── 选店弹层 ──
+const showMerchantPicker = ref(false)
+const pickerSearch = ref('')
+const pickerSearchList = ref<any[]>([])
+const pickerSearchLoading = ref(false)
+const pickerNearbyList = ref<any[]>([])
+const pickerNearbyLoading = ref(false)
+const pickerLocationDenied = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+
 // ── Computed ──
 const canBook = computed(() => !!selectedCategory.value && !!selectedTime.value)
-const restPeriod = computed(() => REST_PERIOD)
+const marqueeText = computed(() => displaySettings.value.welcome_text || '欢迎预约，我们将为您提供专业服务')
 const selectedDate = computed(() => dateList.value[selectedDateIndex.value]?.date || '')
 const selectedDateShort = computed(() => {
   const d = dateList.value[selectedDateIndex.value]
   return d ? `${d.month}/${d.day}` : ''
+})
+
+const themeColor = computed(() => displaySettings.value.theme_color || '#1890ff')
+const themeSoftBgStyle = computed(() => ({ background: hexToRgba(themeColor.value, 0.14) }))
+const themeTextStyle = computed(() => ({ color: themeColor.value }))
+const selectedServiceCardStyle = computed(() => ({
+  background: themeColor.value,
+  borderColor: themeColor.value,
+}))
+const selectedDateStyle = computed(() => ({ background: themeColor.value }))
+const selectedTimeStyle = computed(() => ({ background: themeColor.value }))
+const bookButtonStyle = computed(() => ({
+  background: themeColor.value,
+  boxShadow: `0 10rpx 26rpx ${hexToRgba(themeColor.value, 0.28)}`,
+}))
+const heroMaskStyle = computed(() => ({ background: `linear-gradient(180deg, ${hexToRgba('#000000', 0.08)}, ${hexToRgba('#000000', 0.48)})` }))
+const restPeriodsText = computed(() => getRestPeriods(businessIntervals.value).join(' / '))
+const groupedSlots = computed(() => {
+  if (!businessIntervals.value.length) {
+    return allSlots.value.length ? [{ label: '', start: '', slots: allSlots.value }] : []
+  }
+  return businessIntervals.value
+    .map((itv) => ({
+      label: intervalLabel(itv.start),
+      start: itv.start,
+      slots: allSlots.value.filter((slot: any) => {
+        const minutes = timeToMinutes(slot.start)
+        return minutes >= timeToMinutes(itv.start) && minutes < timeToMinutes(itv.end)
+      }),
+    }))
+    .filter((group) => group.slots.length > 0)
+})
+const todayBusinessLabel = computed(() => {
+  const intervals = getBusinessIntervals(new Date(), merchantInfo.value.business_hours)
+  if (!intervals.length) return '今日休息'
+  return intervals.map((it) => `${it.start}-${it.end}`).join(' / ')
 })
 
 // ── 工具函数 ──
@@ -275,6 +437,124 @@ function formatDateStr(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = (hex || '').replace('#', '').trim()
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+    return `rgba(24, 144, 255, ${alpha})`
+  }
+  const r = parseInt(normalized.slice(0, 2), 16)
+  const g = parseInt(normalized.slice(2, 4), 16)
+  const b = parseInt(normalized.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = String(t || '00:00').split(':').map(Number)
+  return h * 60 + m
+}
+
+function intervalLabel(start: string): string {
+  const hour = parseInt(String(start || '00:00').split(':')[0], 10)
+  if (hour < 12) return '上午'
+  if (hour < 18) return '下午'
+  return '晚上'
+}
+
+function getRestPeriods(intervals: Array<{ start: string; end: string }>): string[] {
+  if (intervals.length < 2) return []
+  const sorted = [...intervals].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))
+  const rests: string[] = []
+  for (let i = 0; i < sorted.length - 1; i += 1) {
+    const current = sorted[i]
+    const next = sorted[i + 1]
+    if (timeToMinutes(current.end) < timeToMinutes(next.start)) {
+      rests.push(`${current.end}-${next.start}`)
+    }
+  }
+  return rests
+}
+
+function getBusinessIntervals(date: Date, businessHours: any): Array<{ start: string; end: string }> {
+  if (!businessHours || typeof businessHours !== 'object') {
+    return [{ start: '09:00', end: '21:00' }]
+  }
+  const weekMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  const dayKey = weekMap[date.getDay()]
+  const day = businessHours[dayKey]
+  if (!day || day.is_open === false) return []
+  const slotKeys = ['morning', 'afternoon', 'evening']
+  const ranges: Array<{ start: string; end: string }> = []
+  slotKeys.forEach((k) => {
+    const slot = day[k]
+    if (!slot || slot.is_open === false || !slot.open || !slot.close) return
+    ranges.push({ start: slot.open, end: slot.close })
+  })
+  if (ranges.length > 0) return ranges
+
+  if (businessHours.start && businessHours.end) {
+    return [{ start: businessHours.start, end: businessHours.end }]
+  }
+
+  return ranges
+}
+
+function normalizeIntervalsFromApi(businessHours: any): Array<{ start: string; end: string }> {
+  if (!businessHours) return []
+  if (Array.isArray(businessHours)) {
+    return businessHours
+      .filter((it: any) => it?.start && it?.end)
+      .map((it: any) => ({ start: String(it.start), end: String(it.end) }))
+  }
+  if (typeof businessHours === 'object' && businessHours.start && businessHours.end) {
+    return [{ start: String(businessHours.start), end: String(businessHours.end) }]
+  }
+  return []
+}
+
+function isWithinIntervals(time: string, intervals: Array<{ start: string; end: string }>): boolean {
+  if (!intervals.length) return true
+  const t = timeToMinutes(time)
+  return intervals.some((it) => t >= timeToMinutes(it.start) && t < timeToMinutes(it.end))
+}
+
+function normalizeImageUrl(url: string): string {
+  if (!url) return ''
+  if (/^https?:\/\//.test(url)) return url
+  const base = (uni.getStorageSync('api_base_url') || 'http://127.0.0.1:3100/api').replace(/\/api\/?$/, '')
+  return `${base}${url}`
+}
+
+async function loadDisplaySettings(merchantId: string) {
+  try {
+    const data = await request.publicGet<any>(`/merchants/${merchantId}/display-settings`) as any
+    const ds = data?.display_settings || {}
+    displaySettings.value = {
+      hero_image: normalizeImageUrl(ds.hero_image || ''),
+      owner_avatar: normalizeImageUrl(ds.owner_avatar || ''),
+      owner_title: ds.owner_title || '店长',
+      theme_color: ds.theme_color || '#1890ff',
+      welcome_text: ds.welcome_text || '欢迎预约，我们将为您提供专业服务',
+    }
+  } catch {
+    displaySettings.value = {
+      hero_image: '',
+      owner_avatar: '',
+      owner_title: '店长',
+      theme_color: '#1890ff',
+      welcome_text: '欢迎预约，我们将为您提供专业服务',
+    }
+  }
+}
+
+function onCallMerchant() {
+  const phone = String(merchantInfo.value.phone || '').trim()
+  if (!phone) {
+    uni.showToast({ title: '门店电话暂未配置', icon: 'none' })
+    return
+  }
+  uni.makePhoneCall({ phoneNumber: phone })
 }
 
 function generateDateList() {
@@ -294,7 +574,7 @@ function generateDateList() {
 
 // ── 交互处理 ──
 async function onSelectCategory(svc: any) {
-  if (selectedCategory.value?.id === svc.id) return
+  if (selectedCategory.value?.service_id === svc.service_id) return
   selectedCategory.value = svc
   if (selectedDate.value && merchantInfo.value.merchant_id) await loadSlots()
 }
@@ -321,11 +601,20 @@ async function loadSlots() {
     }) as any
     if (data?.closed) {
       slotsClosed.value = true
+      businessIntervals.value = []
       allSlots.value = []
       selectedTime.value = ''
     } else {
       const rawSlots = data?.slots || []
-      allSlots.value = rawSlots.filter((slot: any) => !isInRestPeriod(slot.start))
+      const dateObj = new Date(`${selectedDate.value}T00:00:00`)
+      const merchantIntervals = getBusinessIntervals(dateObj, merchantInfo.value.business_hours)
+      const apiIntervals = normalizeIntervalsFromApi(data?.business_hours)
+
+      // 优先使用门店信息中的营业区间；若为空再退回 API 返回
+      businessIntervals.value = merchantIntervals.length ? merchantIntervals : apiIntervals
+
+      // 二次过滤，确保展示严格落在营业区间内
+      allSlots.value = rawSlots.filter((slot: any) => isWithinIntervals(String(slot.start || ''), businessIntervals.value))
       if (selectedTime.value) {
         const keepSelectedTime = allSlots.value.some((slot: any) => {
           return slot.start === selectedTime.value && slot.available
@@ -334,24 +623,12 @@ async function loadSlots() {
       }
     }
   } catch {
+    businessIntervals.value = []
     allSlots.value = []
     selectedTime.value = ''
   } finally {
     loadingSlots.value = false
   }
-}
-
-function isInRestPeriod(time: string): boolean {
-  const [startStr, endStr] = REST_PERIOD.split('-')
-  const toMinutes = (t: string) => {
-    const [h, m] = t.split(':').map(Number)
-    return h * 60 + m
-  }
-
-  const target = toMinutes(time)
-  const restStart = toMinutes(startStr)
-  const restEnd = toMinutes(endStr)
-  return target >= restStart && target < restEnd
 }
 
 // 每次选中日期有效时自动加载时段
@@ -408,7 +685,7 @@ async function createAppointment() {
     showSheet.value = false
     uni.showToast({ title: '预约成功', icon: 'success' })
     setTimeout(() => {
-      uni.switchTab({ url: '/pages/appointment/list' })
+      uni.switchTab({ url: '/pages/index/index' })
     }, 1500)
   } catch (err: any) {
     uni.showToast({ title: err?.message || '预约失败，请重试', icon: 'none' })
@@ -436,6 +713,17 @@ async function ensureLogin() {
 }
 
 async function loadMerchant(): Promise<string> {
+  if (incomingMerchantId.value) {
+    try {
+      const data = await merchantApi.getInfo(incomingMerchantId.value) as any
+      merchantInfo.value = data
+      merchantStore.setMerchant(data)
+      return data.merchant_id
+    } catch {
+      // ignore and fallback
+    }
+  }
+
   if (merchantStore.merchantInfo.merchant_id) {
     merchantInfo.value = { ...merchantStore.merchantInfo }
     return merchantStore.merchantInfo.merchant_id
@@ -462,21 +750,155 @@ async function loadMerchant(): Promise<string> {
 async function init() {
   await ensureLogin()
   const mid = await loadMerchant()
+  await loadDisplaySettings(mid)
   dateList.value = generateDateList()
+  let preselectedByIncomingService = false
   try {
     const data = await serviceApi.getList(mid) as any
     apiServices.value = Array.isArray(data) ? data : []
   } catch {
     apiServices.value = []
   }
+
+  if (incomingServiceId.value) {
+    const matched = displayServices.value.find((svc: any) => {
+      return svc.service_id === incomingServiceId.value
+    })
+    if (matched) {
+      selectedCategory.value = matched
+      preselectedByIncomingService = true
+    }
+  }
+
+  if (!selectedCategory.value && displayServices.value.length > 0) {
+    selectedCategory.value = displayServices.value[0]
+  }
+
   await loadSlots()
+
+  // 从“再次预约”进入时，自动滚动到到店时间区，减少二次操作
+  if (preselectedByIncomingService) {
+    await nextTick()
+    setTimeout(() => {
+      uni.pageScrollTo({ selector: '#time-section', duration: 280 })
+    }, 60)
+  }
 }
+
+onLoad((options: any) => {
+  if (options?.merchant_id) {
+    incomingMerchantId.value = String(options.merchant_id)
+  }
+  if (options?.service_id) {
+    incomingServiceId.value = String(options.service_id)
+  }
+})
 
 onShow(() => { void init() })
 onPullDownRefresh(async () => {
   await init()
   uni.stopPullDownRefresh()
 })
+
+onShareAppMessage(() => {
+  const merchantId = merchantInfo.value?.merchant_id || merchantStore.merchantInfo.merchant_id || ''
+  return {
+    title: merchantInfo.value?.name ? `${merchantInfo.value.name}，点击立即预约` : '推荐你这家美发门店',
+    path: merchantId ? `/pages/index/index?merchant_id=${merchantId}` : '/pages/platform/index',
+  }
+})
+
+onShareTimeline(() => {
+  const merchantId = merchantInfo.value?.merchant_id || merchantStore.merchantInfo.merchant_id || ''
+  return {
+    title: merchantInfo.value?.name || '推荐一家不错的美发门店',
+    query: merchantId ? `merchant_id=${merchantId}` : '',
+  }
+})
+
+// ── 选店弹层逻辑 ──
+function openMerchantPicker() {
+  pickerSearch.value = ''
+  pickerSearchList.value = []
+  showMerchantPicker.value = true
+  loadNearbyMerchants()
+}
+
+function closeMerchantPicker() {
+  showMerchantPicker.value = false
+}
+
+async function loadNearbyMerchants() {
+  pickerNearbyLoading.value = true
+  pickerLocationDenied.value = false
+  try {
+    const location = await new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
+      uni.getLocation({
+        type: 'gcj02',
+        success: (res) => resolve({ latitude: res.latitude, longitude: res.longitude }),
+        fail: () => reject(new Error('denied')),
+      })
+    })
+    const data = await merchantApi.nearby({ lat: location.latitude, lng: location.longitude, radius: 3 }) as any
+    const list: any[] = Array.isArray(data?.list) ? data.list : []
+    pickerNearbyList.value = list.filter((m: any) => m.merchant_id !== merchantInfo.value.merchant_id)
+  } catch {
+    pickerLocationDenied.value = true
+    pickerNearbyList.value = []
+  } finally {
+    pickerNearbyLoading.value = false
+  }
+}
+
+function onPickerSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  const keyword = pickerSearch.value.trim()
+  if (!keyword) {
+    pickerSearchList.value = []
+    return
+  }
+  searchTimer = setTimeout(async () => {
+    pickerSearchLoading.value = true
+    try {
+      const data = await merchantApi.search({ name: keyword, limit: 20 }) as any
+      pickerSearchList.value = Array.isArray(data?.list) ? data.list : []
+    } catch {
+      pickerSearchList.value = []
+    } finally {
+      pickerSearchLoading.value = false
+    }
+  }, 400)
+}
+
+async function onSelectMerchant(m: any) {
+  if (m.merchant_id === merchantInfo.value.merchant_id) {
+    closeMerchantPicker()
+    return
+  }
+  closeMerchantPicker()
+  try {
+    const data = await merchantApi.getInfo(m.merchant_id) as any
+    merchantInfo.value = data
+    merchantStore.setMerchant(data)
+  } catch {
+    merchantInfo.value = { ...m }
+    merchantStore.setMerchant(m)
+  }
+  // 重置时段选择并刷新服务
+  selectedCategory.value = null
+  selectedTime.value = ''
+  allSlots.value = []
+  await loadDisplaySettings(m.merchant_id)
+  try {
+    const svcData = await serviceApi.getList(m.merchant_id) as any
+    apiServices.value = Array.isArray(svcData) ? svcData : []
+    if (displayServices.value.length > 0) {
+      selectedCategory.value = displayServices.value[0]
+    }
+  } catch {
+    apiServices.value = []
+  }
+}
 </script>
 
 <style scoped>
@@ -489,156 +911,307 @@ onPullDownRefresh(async () => {
   font-weight: 400;
 }
 
-/* ── 英雄横幅 ── */
-.hero {
-  position: relative;
+/* ── 门店卡片（替代原英雄横幅）── */
+.merchant-card {
   background: #FFFFFF;
-  overflow: hidden;
+  border-bottom: 1rpx solid #F0F0F0;
 }
 
-.hero-gradient {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(160deg, #F8F8F8 0%, #FFFFFF 100%);
-}
-
-.hero-noise {
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1rpx, transparent 0);
-  background-size: 6rpx 6rpx;
-  opacity: 0.06;
-}
-
-.hero-body {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0 30rpx 28rpx;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.hero-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.hero-chip {
-  height: 44rpx;
-  padding: 0 16rpx;
-  border-radius: 22rpx;
-  background: rgba(0, 0, 0, 0.08);
-  border: 1rpx solid rgba(0, 0, 0, 0.1);
-  color: #1A1A1A;
-  font-size: 20rpx;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  letter-spacing: 1rpx;
-}
-
-.hero-rating {
-  display: flex;
-  align-items: center;
-  padding: 10rpx 14rpx;
-  border-radius: 18rpx;
-  background: rgba(0, 0, 0, 0.06);
-  border: 1rpx solid rgba(0, 0, 0, 0.08);
-}
-
-.hero-rating-star {
-  color: #FFD700;
-  font-size: 22rpx;
-  margin-right: 6rpx;
-}
-
-.hero-rating-score {
-  color: #1A1A1A;
-  font-size: 22rpx;
-  font-weight: 600;
-}
-
-.hero-main {
+.merchant-card-inner {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  padding: 0 32rpx 28rpx;
+  background-size: cover;
+  background-position: center;
+  overflow: hidden;
 }
 
-.hero-left {
+.merchant-card-mask {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.merchant-card-left {
+  position: relative;
+  z-index: 1;
   flex: 1;
-  margin-right: 18rpx;
+  margin-right: 20rpx;
 }
 
-.hero-name {
+.merchant-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 12rpx;
+}
+
+.merchant-name {
   display: block;
-  font-size: 48rpx;
+  font-size: 44rpx;
   font-weight: 700;
-  color: #1A1A1A;
-  letter-spacing: 1rpx;
-  margin-bottom: 10rpx;
+  color: #FFFFFF;
+  letter-spacing: 0.5rpx;
+  text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.24);
 }
 
-.hero-meta-row {
+.merchant-addr-row,
+.merchant-hours-row {
   display: flex;
   align-items: center;
   margin-bottom: 6rpx;
 }
 
-.hero-meta-icon {
-  font-size: 24rpx;
+.merchant-meta-icon {
+  font-size: 22rpx;
   margin-right: 8rpx;
 }
 
-.hero-meta-text {
-  font-size: 21rpx;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.6);
+.merchant-meta-text {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.92);
+  flex: 1;
+  text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.2);
 }
 
-/* 员工卡片 */
-.hero-staff {
+.merchant-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 50%;
+  border: 1rpx solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(6rpx);
+}
+
+.merchant-switch-icon {
+  font-size: 22rpx;
+  font-weight: 600;
+}
+
+.merchant-card-right {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 112rpx;
+  gap: 10rpx;
+  padding-bottom: 4rpx;
 }
 
-.staff-circle {
-  width: 86rpx;
-  height: 86rpx;
+.owner-avatar-lg {
+  width: 100rpx;
+  height: 100rpx;
   border-radius: 50%;
-  background: rgba(255, 149, 0, 0.1);
-  border: 2rpx solid rgba(255, 149, 0, 0.2);
+  border: 3rpx solid rgba(255, 255, 255, 0.6);
+}
+
+.owner-avatar-placeholder-lg {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 10rpx;
 }
 
-.staff-circle-icon {
-  font-size: 32rpx;
+.owner-avatar-placeholder-text {
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.owner-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.owner-title {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.28);
+  font-weight: 600;
+}
+
+.phone-action {
+  width: 44rpx;
+  height: 44rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1rpx solid rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(6rpx);
+}
+
+.phone-icon {
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+/* ── 选店弹层 ── */
+.picker-wrap {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.picker-dialog {
+  position: relative;
+  width: 680rpx;
+  max-height: 80vh;
+  background: #FFFFFF;
+  border-radius: 32rpx;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 40rpx 40rpx 24rpx;
+  flex-shrink: 0;
+}
+
+.picker-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.picker-close {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 50%;
+  background: #F5F5F5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-close-text {
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.picker-search-wrap {
+  padding: 0 40rpx 20rpx;
+  flex-shrink: 0;
+}
+
+.picker-search-input {
+  width: 100%;
+  height: 80rpx;
+  background: #F5F5F7;
+  border-radius: 20rpx;
+  padding: 0 28rpx;
+  font-size: 26rpx;
+  color: #1A1A1A;
+  box-sizing: border-box;
+}
+
+.picker-scroll {
+  flex: 1;
+  height: 0;
+  min-height: 300rpx;
+  max-height: 60vh;
+}
+
+.picker-section {
+  padding: 4rpx 0 16rpx;
+}
+
+.picker-section-title {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #8E8E93;
+  padding: 16rpx 40rpx 8rpx;
+  letter-spacing: 0.5rpx;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 40rpx;
+  border-bottom: 1rpx solid #F5F5F7;
+}
+
+.picker-item-active {
+  background: rgba(255, 149, 0, 0.05);
+}
+
+.picker-item-left {
+  flex: 1;
+  margin-right: 16rpx;
+}
+
+.picker-item-name {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+  margin-bottom: 6rpx;
+}
+
+.picker-item-addr {
+  display: block;
+  font-size: 22rpx;
+  font-weight: 400;
+  color: #8E8E93;
+}
+
+.picker-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4rpx;
+}
+
+.picker-item-dist {
+  font-size: 22rpx;
+  font-weight: 600;
   color: #FF9500;
 }
 
-.staff-name {
-  font-size: 21rpx;
-  font-weight: 600;
-  color: #1A1A1A;
-  margin-bottom: 4rpx;
+.picker-item-check {
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #FF9500;
 }
 
-.staff-title {
-  font-size: 17rpx;
-  font-weight: 500;
-  color: rgba(0, 0, 0, 0.5);
+.picker-loading,
+.picker-empty {
+  padding: 40rpx;
+  text-align: center;
+}
+
+.picker-loading-text,
+.picker-empty-text {
+  font-size: 24rpx;
+  color: #BBBBBB;
 }
 
 /* ── 通用区块 ── */
@@ -901,16 +1474,38 @@ onPullDownRefresh(async () => {
   color: #BBBBBB;
 }
 
+.time-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  padding-right: 40rpx;
+}
+
+.time-group {
+  margin-bottom: 10rpx;
+}
+
+.time-group:last-child {
+  margin-bottom: 0;
+}
+
+.time-group-label {
+  display: block;
+  margin-bottom: 14rpx;
+  font-size: 24rpx;
+  color: #999999;
+}
+
 /* 时间网格 */
 .time-grid {
   display: flex;
   flex-wrap: wrap;
-  padding-right: 40rpx;
   gap: 16rpx;
 }
 
 .time-slot {
-  width: calc(25% - 12rpx);
+  width: calc((100% - 48rpx) / 4);
+  flex: 0 0 calc((100% - 48rpx) / 4);
   height: 80rpx;
   border-radius: 16rpx;
   background: #F5F5F7;

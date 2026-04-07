@@ -293,9 +293,9 @@ async function loadData() {
       params.status = filterStatus.value
     }
     const res: any = await adminApi.getMerchants(params)
-    const data = res?.data || res
+    const data = res?.data ?? res
     tableData.value = data?.list || (Array.isArray(data) ? data : [])
-    total.value = data?.total || tableData.value.length
+    total.value = data?.total ?? tableData.value.length
   } catch (e) { console.error(e) }
   finally { loading.value = false }
 }

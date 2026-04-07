@@ -10,6 +10,9 @@ import adminRoutes from './admin.js'
 import feishuRoutes from './feishu.js'
 import wechatConfigRoutes from './wechatConfig.js'
 import wechatMessageRoutes from './wechatMessage.js'
+import staffRoutes from './staff.js'
+import uploadRoutes from './upload.js'
+import platformRoutes from './platform.js'
 
 export function registerRoutes(app: any) {
   const apiRouter = new Router()
@@ -25,6 +28,9 @@ export function registerRoutes(app: any) {
   apiRouter.use(adminRoutes.routes(), adminRoutes.allowedMethods())
   apiRouter.use(feishuRoutes.routes(), feishuRoutes.allowedMethods())
   apiRouter.use(wechatConfigRoutes.routes(), wechatConfigRoutes.allowedMethods())
+  apiRouter.use(staffRoutes.routes(), staffRoutes.allowedMethods())
+  apiRouter.use(uploadRoutes.routes(), uploadRoutes.allowedMethods())
+  apiRouter.use(platformRoutes.routes(), platformRoutes.allowedMethods())
 
   app.use(apiRouter.routes())
   app.use(apiRouter.allowedMethods())

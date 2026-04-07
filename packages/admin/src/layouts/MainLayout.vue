@@ -26,7 +26,10 @@
               <span>门店管理</span>
             </template>
             <el-menu-item index="/admin/merchants">门店列表</el-menu-item>
+            <el-menu-item index="/admin/owners">店长管理</el-menu-item>
             <el-menu-item index="/admin/applications">入驻审核</el-menu-item>
+            <el-menu-item index="/admin/ads">广告管理</el-menu-item>
+            <el-menu-item index="/admin/platform-coze">AI发型推荐</el-menu-item>
           </el-sub-menu>
 
           <el-sub-menu index="settings">
@@ -36,6 +39,7 @@
             </template>
             <el-menu-item index="/settings/profile">个人设置</el-menu-item>
             <el-menu-item index="/settings/wechat">微信配置</el-menu-item>
+            <el-menu-item index="/settings/system-email">系统邮件配置</el-menu-item>
           </el-sub-menu>
         </template>
 
@@ -61,9 +65,13 @@
             <el-icon><User /></el-icon>
             <span>顾客管理</span>
           </el-menu-item>
-          <el-menu-item index="/schedule">
-            <el-icon><Clock /></el-icon>
-            <span>营业设置</span>
+          <el-menu-item index="/merchant/staff">
+            <el-icon><Avatar /></el-icon>
+            <span>员工管理</span>
+          </el-menu-item>
+          <el-menu-item index="/merchant/settings">
+            <el-icon><Shop /></el-icon>
+            <span>门店管理</span>
           </el-menu-item>
           <el-menu-item index="/stats">
             <el-icon><TrendCharts /></el-icon>
@@ -76,10 +84,13 @@
               <span>系统设置</span>
             </template>
             <el-menu-item index="/settings/profile">个人设置</el-menu-item>
+            <el-menu-item index="/settings/membership-levels">会员字典配置</el-menu-item>
+            <el-menu-item index="/settings/ai-image">AI生图配置</el-menu-item>
             <el-menu-item index="/settings/coze">COZE 配置</el-menu-item>
             <el-menu-item index="/settings/feishu">飞书配置</el-menu-item>
             <el-menu-item index="/settings/sync">同步配置</el-menu-item>
             <el-menu-item index="/settings/notify">通知配置</el-menu-item>
+            <el-menu-item index="/settings/backup">数据备份</el-menu-item>
           </el-sub-menu>
         </template>
 

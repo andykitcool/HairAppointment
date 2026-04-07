@@ -42,9 +42,8 @@ const ServiceSchema = new Schema<IServiceDocument>({
   update_time: { type: Date, default: Date.now },
 })
 
-ServiceSchema.pre('save', function (next) {
+ServiceSchema.pre('save', function () {
   this.update_time = new Date()
-  next()
 })
 
 ServiceSchema.index({ merchant_id: 1, is_active: 1, sort_order: 1 })

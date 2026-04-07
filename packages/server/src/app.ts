@@ -1,5 +1,5 @@
 import Koa from 'koa'
-import koaBody from 'koa-body'
+import { koaBody } from 'koa-body'
 import cors from '@koa/cors'
 import fs from 'fs'
 import path from 'path'
@@ -30,9 +30,9 @@ async function bootstrap() {
 
   // 微信域名验证文件（业务域名配置用）
   app.use(async (ctx, next) => {
-    if (ctx.path.startsWith('/MP_verify_')) {
+    if (ctx.path.startsWith('/MP_verify_') || ctx.path === '/Hto6LvxMA6.txt') {
       // 从项目根目录查找验证文件
-      const filePath = path.join(process.cwd(), 'packages', 'server', ctx.path)
+      const filePath = path.join(process.cwd(), ctx.path)
       if (fs.existsSync(filePath)) {
         ctx.type = 'text/plain'
         ctx.body = fs.readFileSync(filePath, 'utf-8')
@@ -73,7 +73,7 @@ async function bootstrap() {
     multipart: true,
     jsonLimit: '10mb',
     formLimit: '10mb',
-    onError: (err, ctx) => {
+    onError: (err: Error, ctx: Koa.Context) => {
       // 微信消息路径的错误可以忽略
       if (ctx.path === '/api/wechat/message') {
         console.log('[WechatMessage] koaBody error ignored for wechat message')
@@ -82,6 +82,19 @@ async function bootstrap() {
       throw err
     },
   }))
+
+  // 静态文件服务 - 上传的图片
+  app.use(async (ctx, next) => {
+    if (ctx.path.startsWith('/uploads/')) {
+      const filePath = path.join(process.cwd(), 'uploads', ctx.path.replace('/uploads/', ''))
+      if (fs.existsSync(filePath)) {
+        ctx.type = path.extname(filePath)
+        ctx.body = fs.createReadStream(filePath)
+        return
+      }
+    }
+    await next()
+  })
 
   registerRoutes(app)
   initCronJobs()

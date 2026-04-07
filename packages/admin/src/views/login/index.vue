@@ -29,7 +29,7 @@
         <div class="qr-wrapper" v-loading="qrLoading">
           <img v-if="qrCode" :src="qrCode" alt="微信登录二维码" class="qr-code" />
           <div v-else class="qr-placeholder">
-            <el-icon :size="48" color="#909399"><Picture /></el-icon>
+            <span style="color:#909399;font-size:14px;">二维码生成中...</span>
           </div>
         </div>
         <p class="qr-tips">请使用微信扫一扫登录</p>
@@ -47,7 +47,6 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { authApi } from '@/api/request'
 import { ElMessage } from 'element-plus'
-import { Picture } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -80,7 +79,8 @@ async function handleLogin() {
         token: res.data.token,
         role: res.data.role,
         realName: res.data.real_name,
-        username: form.username
+        username: form.username,
+        merchantId: res.data.merchant_id || ''
       }
       authStore.setUser(userData)
       ElMessage.success('登录成功')
@@ -140,7 +140,7 @@ function startPolling() {
           clearInterval(pollTimer!)
           pollTimer = null
           
-          authStore.setUser({ token, role, realName: real_name })
+          authStore.setUser({ token, role, realName: real_name, merchantId: res.data.merchant_id || '' })
           ElMessage.success('登录成功')
           router.push('/dashboard')
         } else if (status === 'scanned') {

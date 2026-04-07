@@ -1,7 +1,7 @@
 import Router from 'koa-router'
-import * as notificationController from '../controllers/notification'
-import { authMiddleware, requireOwner } from '../middleware/auth'
-import { cozeAuthMiddleware } from '../middleware/auth'
+import * as notificationController from '../controllers/notification.js'
+import { authMiddleware, requireOwner } from '../middleware/auth.js'
+import { cozeAuthMiddleware } from '../middleware/auth.js'
 
 const router = new Router({ prefix: '/api/notifications' })
 

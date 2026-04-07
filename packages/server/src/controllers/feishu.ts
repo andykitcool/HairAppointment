@@ -1,5 +1,5 @@
 import { Context } from 'koa'
-import { SyncLogModel } from '../models'
+import { SyncLogModel } from '../models/index.js'
 
 /**
  * 飞书 Webhook 回调

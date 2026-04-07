@@ -1,8 +1,56 @@
 import { Context } from 'koa'
-import { UserModel, MerchantModel, StaffModel, ServiceModel } from '../models'
-import { signJwt, verifyJwt } from '../middleware/auth'
-import { PRESET_SERVICES, generateShortId } from '../../../shared/src/index'
+import { UserModel, MerchantModel, StaffModel, ServiceModel } from '../models/index.js'
+import { signJwt, verifyJwt } from '../middleware/auth.js'
+import { PRESET_SERVICES, generateShortId } from '../../../shared/dist/index.js'
 import axios from 'axios'
+import { getActiveMpConfig } from './wechatConfig.js'
+
+async function ensureOwnerStaffOnLogin(params: {
+  merchantId?: string
+  ownerId?: string
+  ownerName?: string
+  ownerPhone?: string
+}) {
+  const { merchantId, ownerId, ownerName, ownerPhone } = params
+  if (!merchantId || !ownerId) return
+
+  const services = await ServiceModel.find({ merchant_id: merchantId, is_active: true }).select({ service_id: 1 }).lean()
+  const serviceIds = services.map((service: any) => service.service_id)
+
+  const existingOwnerStaff = await StaffModel.findOne({
+    merchant_id: merchantId,
+    $or: [
+      { user_id: ownerId },
+      { title: '店长' },
+    ],
+  }).sort({ create_time: 1 })
+
+  if (existingOwnerStaff) {
+    await StaffModel.updateOne(
+      { _id: existingOwnerStaff._id },
+      {
+        user_id: ownerId,
+        name: ownerName || existingOwnerStaff.name || '店长',
+        title: '店长',
+        phone: ownerPhone || existingOwnerStaff.phone || '',
+        is_active: true,
+        service_ids: serviceIds,
+      }
+    )
+    return
+  }
+
+  await StaffModel.create({
+    staff_id: ownerId,
+    merchant_id: merchantId,
+    user_id: ownerId,
+    name: ownerName || '店长',
+    title: '店长',
+    phone: ownerPhone || '',
+    is_active: true,
+    service_ids: serviceIds,
+  })
+}
 
 /**
  * 微信登录
@@ -16,10 +64,15 @@ export async function wechatLogin(ctx: Context) {
 
   try {
     // 通过 code 换取 openid
+    const mpConfig = await getActiveMpConfig()
+    if (!mpConfig) {
+      ctx.body = { code: 500, message: '未配置小程序凭证，请在后台添加微信配置', data: null }
+      return
+    }
     const wxRes = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
       params: {
-        appid: process.env.WX_APPID,
-        secret: process.env.WX_APP_SECRET,
+        appid: mpConfig.appid,
+        secret: mpConfig.app_secret,
         js_code: code,
         grant_type: 'authorization_code',
       },
@@ -27,6 +80,7 @@ export async function wechatLogin(ctx: Context) {
 
     const { openid, session_key, unionid } = wxRes.data
     if (!openid) {
+      console.error('[wechatLogin] jscode2session failed:', wxRes.data)
       ctx.body = { code: 400, message: '微信登录失败', data: wxRes.data }
       return
     }
@@ -35,6 +89,7 @@ export async function wechatLogin(ctx: Context) {
     let user = await UserModel.findOne({ openid })
     if (!user) {
       user = await UserModel.create({
+        user_id: generateShortId('U'),
         openid,
         union_id: unionid,
         nickname: '微信用户',
@@ -69,6 +124,7 @@ export async function wechatLogin(ctx: Context) {
       },
     }
   } catch (err: any) {
+    console.error('[wechatLogin] unexpected error:', err?.response?.data || err)
     ctx.status = 500
     ctx.body = { code: 500, message: err.message, data: null }
   }
@@ -86,11 +142,16 @@ export async function getPhone(ctx: Context) {
 
   try {
     // 获取微信 access_token
+    const mpConfig = await getActiveMpConfig()
+    if (!mpConfig) {
+      ctx.body = { code: 500, message: '未配置小程序凭证，请在后台添加微信配置', data: null }
+      return
+    }
     const tokenRes = await axios.get('https://api.weixin.qq.com/cgi-bin/token', {
       params: {
         grant_type: 'client_credential',
-        appid: process.env.WX_APPID,
-        secret: process.env.WX_APP_SECRET,
+        appid: mpConfig.appid,
+        secret: mpConfig.app_secret,
       },
     })
 
@@ -129,10 +190,13 @@ export async function adminLogin(ctx: Context) {
 
   try {
     const bcrypt = await import('bcryptjs')
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
 
-    // 查找账号
-    const admin = await AdminModel.findOne({ username, is_active: true })
+    // 查找账号（支持用户名或手机号登录）
+    const admin = await AdminModel.findOne({
+      $or: [{ username }, { phone: username }],
+      is_active: true
+    })
     if (!admin) {
       ctx.body = { code: 404, message: '账号不存在', data: null }
       return
@@ -148,11 +212,32 @@ export async function adminLogin(ctx: Context) {
     // 使用数据库中的真实角色
     const adminRole = admin.role || 'merchant_admin'
 
+    // 店长角色必须绑定门店才能登录
+    if (adminRole === 'owner' && !admin.merchant_id) {
+      ctx.body = { 
+        code: 403, 
+        message: '用户未绑定门店，请联系管理员', 
+        data: { need_bind_merchant: true } 
+      }
+      return
+    }
+
+    // 自动生成时机：店长后台登录成功后，确保“店长员工”存在且为最新信息
+    if (adminRole === 'owner') {
+      await ensureOwnerStaffOnLogin({
+        merchantId: admin.merchant_id,
+        ownerId: admin._id.toString(),
+        ownerName: admin.real_name,
+        ownerPhone: admin.phone,
+      })
+    }
+
     // 生成 JWT Token
     const token = signJwt({
       user_id: admin._id.toString(),
       role: adminRole,
       type: 'admin',
+      merchant_id: admin.merchant_id,
     })
 
     ctx.body = {
@@ -162,6 +247,7 @@ export async function adminLogin(ctx: Context) {
         token,
         role: adminRole,
         real_name: admin.real_name,
+        merchant_id: admin.merchant_id,
       },
     }
   } catch (err: any) {
@@ -238,10 +324,17 @@ export async function getProfile(ctx: Context) {
       avatar_url: user.avatar_url,
       phone: user.phone,
       real_name: user.real_name,
+      gender: user.gender,
+      age: user.age,
+      birthday: user.birthday,
       role: user.role,
       merchant_id: user.merchant_id,
       customer_note: user.customer_note,
       merchant_note: user.merchant_note,
+      points: user.points,
+      membership_level: user.membership_level,
+      punch_card_remaining: user.punch_card_remaining,
+      stored_value_balance: user.stored_value_balance,
       visit_count: user.visit_count,
       total_spending: user.total_spending,
       last_visit_time: user.last_visit_time,
@@ -254,11 +347,14 @@ export async function getProfile(ctx: Context) {
  */
 export async function updateProfile(ctx: Context) {
   const userId = ctx.state.user._id
-  const { nickname, avatar_url, real_name, customer_note } = ctx.request.body as {
+  const { nickname, avatar_url, real_name, customer_note, gender, age, birthday } = ctx.request.body as {
     nickname?: string
     avatar_url?: string
     real_name?: string
     customer_note?: string
+    gender?: 'male' | 'female' | 'unknown'
+    age?: number
+    birthday?: string
   }
 
   const updateData: Record<string, any> = {}
@@ -266,6 +362,9 @@ export async function updateProfile(ctx: Context) {
   if (avatar_url !== undefined) updateData.avatar_url = avatar_url
   if (real_name !== undefined) updateData.real_name = real_name
   if (customer_note !== undefined) updateData.customer_note = customer_note
+  if (gender !== undefined) updateData.gender = gender
+  if (age !== undefined) updateData.age = Number(age)
+  if (birthday !== undefined) updateData.birthday = birthday
 
   await UserModel.findByIdAndUpdate(userId, updateData)
   ctx.body = { code: 0, message: '更新成功', data: null }
@@ -310,7 +409,7 @@ export async function changeAdminPassword(ctx: Context) {
 
   try {
     const bcrypt = await import('bcryptjs')
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     
     // 获取当前管理员ID
     const adminId = ctx.state.user._id
@@ -365,7 +464,7 @@ export async function bindAdminPhone(ctx: Context) {
   }
 
   try {
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     const adminId = ctx.state.user._id
     
     // 检查手机号是否已被其他管理员绑定
@@ -384,11 +483,47 @@ export async function bindAdminPhone(ctx: Context) {
 }
 
 /**
+ * 管理员绑定邮箱
+ */
+export async function bindAdminEmail(ctx: Context) {
+  const { email } = (ctx.request.body || {}) as { email?: string }
+
+  if (!email) {
+    ctx.body = { code: 400, message: '缺少邮箱地址', data: null }
+    return
+  }
+
+  const emailText = String(email).trim().toLowerCase()
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(emailText)) {
+    ctx.body = { code: 400, message: '邮箱格式不正确', data: null }
+    return
+  }
+
+  try {
+    const { AdminModel } = await import('../models/index.js')
+    const adminId = ctx.state.user._id
+
+    const existing = await AdminModel.findOne({ email: emailText, _id: { $ne: adminId } })
+    if (existing) {
+      ctx.body = { code: 400, message: '该邮箱已被其他账号绑定', data: null }
+      return
+    }
+
+    await AdminModel.findByIdAndUpdate(adminId, { email: emailText })
+    ctx.body = { code: 0, message: '邮箱绑定成功', data: { email: emailText } }
+  } catch (err: any) {
+    ctx.status = 500
+    ctx.body = { code: 500, message: err.message, data: null }
+  }
+}
+
+/**
  * 获取当前管理员信息
  */
 export async function getAdminProfile(ctx: Context) {
   try {
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     const adminId = ctx.state.user._id
     
     const admin = await AdminModel.findById(adminId)
@@ -405,6 +540,7 @@ export async function getAdminProfile(ctx: Context) {
         username: admin.username,
         real_name: admin.real_name,
         phone: admin.phone || '',
+        email: admin.email || '',
         wx_openid: admin.wx_openid || '',
         is_active: admin.is_active,
         create_time: admin.create_time,
@@ -416,7 +552,7 @@ export async function getAdminProfile(ctx: Context) {
   }
 }
 
-import { getActiveServiceConfig } from './wechatConfig'
+import { getActiveServiceConfig } from './wechatConfig.js'
 
 // 内存存储扫码登录状态（生产环境建议使用Redis）
 const loginQRStore = new Map<string, {
@@ -424,7 +560,9 @@ const loginQRStore = new Map<string, {
   token?: string
   role?: string
   real_name?: string
+  merchant_id?: string
   openid?: string
+  message?: string
   create_time: number
 }>()
 
@@ -565,22 +703,34 @@ export async function checkLoginStatus(ctx: Context) {
     return
   }
 
+  // 构建响应数据
+  const responseData: any = {
+    status: loginData.status,
+  }
+
+  if (loginData.status === 'success') {
+    responseData.token = loginData.token
+    responseData.role = loginData.role
+    responseData.real_name = loginData.real_name
+    responseData.merchant_id = loginData.merchant_id
+    // 登录成功，清除记录
+    loginQRStore.delete(scene)
+  } else if (loginData.status === 'expired') {
+    // 返回错误信息（如未绑定门店）
+    if (loginData.message) {
+      responseData.message = loginData.message
+      console.log(`[CheckLoginStatus] Returning expired with message: ${loginData.message}`)
+    } else {
+      console.log(`[CheckLoginStatus] Returning expired without message`)
+    }
+    // 失败状态也清除记录
+    loginQRStore.delete(scene)
+  }
+
   ctx.body = {
     code: 0,
     message: 'ok',
-    data: {
-      status: loginData.status,
-      ...(loginData.status === 'success' && {
-        token: loginData.token,
-        role: loginData.role,
-        real_name: loginData.real_name,
-      }),
-    },
-  }
-
-  // 如果登录成功，清除该记录
-  if (loginData.status === 'success') {
-    loginQRStore.delete(scene)
+    data: responseData,
   }
 }
 
@@ -736,7 +886,7 @@ export async function handleWechatBindEvent(scene: string, openid: string) {
     console.log(`[WechatBind] Updated status to 'scanned'`)
 
     // 检查该微信是否已被其他管理员绑定
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     const existing = await AdminModel.findOne({ wx_openid: openid, _id: { $ne: bindData.admin_id } })
     if (existing) {
       console.log(`[WechatBind] Wechat already bound to another admin:`, existing._id)
@@ -783,24 +933,36 @@ export async function handleWechatScanEvent(scene: string, openid: string) {
     loginQRStore.set(scene, loginData)
 
     // 查找是否已有管理员绑定此微信号
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     const admin = await AdminModel.findOne({ wx_openid: openid })
 
     if (!admin) {
       // 没有绑定账号，标记为失败
       loginData.status = 'expired'
+      loginData.message = '该微信未绑定任何管理员账号'
       loginQRStore.set(scene, loginData)
       return { success: false, message: '该微信未绑定任何管理员账号' }
     }
 
     if (!admin.is_active) {
       loginData.status = 'expired'
+      loginData.message = '账号已被禁用'
       loginQRStore.set(scene, loginData)
       return { success: false, message: '账号已被禁用' }
     }
 
     // 使用数据库中的真实角色
     const adminRole = admin.role || 'owner'
+
+    // 店长角色必须绑定门店才能登录
+    console.log(`[WechatScan] Admin check: role=${adminRole}, merchant_id=${admin.merchant_id}, admin_id=${admin._id}`)
+    if (adminRole === 'owner' && !admin.merchant_id) {
+      loginData.status = 'expired'
+      loginData.message = '用户未绑定门店，请联系管理员'
+      loginQRStore.set(scene, loginData)
+      console.log(`[WechatScan] Owner login rejected: no merchant_id, scene=${scene}, admin_id=${admin._id}`)
+      return { success: false, message: '用户未绑定门店，请联系管理员' }
+    }
 
     // 生成JWT Token
     const token = signJwt({
@@ -809,11 +971,12 @@ export async function handleWechatScanEvent(scene: string, openid: string) {
       type: 'admin',
     })
 
-    // 更新状态为成功
+    // 更新状态为成功（保存merchant_id用于前端）
     loginData.status = 'success'
     loginData.token = token
     loginData.role = adminRole
     loginData.real_name = admin.real_name || ''
+    loginData.merchant_id = admin.merchant_id || ''
     loginQRStore.set(scene, loginData)
 
     return { success: true, message: '登录成功' }
@@ -836,10 +999,15 @@ export async function bindAdminWechat(ctx: Context) {
 
   try {
     // 通过code换取openid
+    const mpConfig = await getActiveMpConfig()
+    if (!mpConfig) {
+      ctx.body = { code: 500, message: '未配置小程序凭证，请在后台添加微信配置', data: null }
+      return
+    }
     const wxRes = await axios.get('https://api.weixin.qq.com/sns/jscode2session', {
       params: {
-        appid: process.env.WX_APPID,
-        secret: process.env.WX_APP_SECRET,
+        appid: mpConfig.appid,
+        secret: mpConfig.app_secret,
         js_code: code,
         grant_type: 'authorization_code',
       },
@@ -851,7 +1019,7 @@ export async function bindAdminWechat(ctx: Context) {
       return
     }
 
-    const { AdminModel } = await import('../models')
+    const { AdminModel } = await import('../models/index.js')
     const adminId = ctx.state.user._id
     
     // 检查该微信是否已被其他管理员绑定

@@ -60,9 +60,8 @@ const AppointmentSchema = new Schema<IAppointmentDocument>({
   update_time: { type: Date, default: Date.now },
 })
 
-AppointmentSchema.pre('save', function (next) {
+AppointmentSchema.pre('save', function () {
   this.update_time = new Date()
-  next()
 })
 
 // 复合索引：按商户+日期+状态查询

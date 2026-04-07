@@ -267,9 +267,17 @@ async function saveEdit(row: any, field: string, showMessage = true) {
 async function saveStages(row: any) {
   saving.value = true
   try {
-    await serviceApi.update(row.service_id, { stages: editStages.value })
+    const normalizedStages = (editStages.value || [])
+      .map((stage: any) => ({
+        name: (stage?.name || '').trim() || row.name,
+        duration: Number(stage?.duration) || 10,
+        staff_busy: stage?.staff_busy !== false,
+      }))
+      .filter((stage: any) => stage.name)
+
+    await serviceApi.update(row.service_id, { stages: normalizedStages })
     ElMessage.success('更新成功')
-    row.stages = JSON.parse(JSON.stringify(editStages.value))
+    row.stages = JSON.parse(JSON.stringify(normalizedStages))
     editingCell.value = null
     editStages.value = []
   } catch (e: any) {
@@ -312,13 +320,21 @@ async function saveNewRow(row: any) {
   
   saving.value = true
   try {
+    const normalizedStages = (row.stages || [])
+      .map((stage: any) => ({
+        name: (stage?.name || '').trim() || row.name.trim(),
+        duration: Number(stage?.duration) || row.total_duration || 30,
+        staff_busy: stage?.staff_busy !== false,
+      }))
+      .filter((stage: any) => stage.name)
+
     const data = {
       name: row.name,
       category: row.category,
       price: row.price,
       total_duration: row.total_duration,
       staff_busy_duration: row.staff_busy_duration,
-      stages: row.stages,
+      stages: normalizedStages,
       is_active: row.is_active,
       sort_order: row.sort_order,
       description: row.description || '',
@@ -348,10 +364,11 @@ async function loadData() {
   loading.value = true
   try {
     const res = await serviceApi.getList({ merchant_id: authStore.user.merchantId }) as any
-    if (res?.code === 0 && Array.isArray(res.data)) {
-      tableData.value = res.data
-    } else if (Array.isArray(res)) {
-      tableData.value = res
+    const payload = res?.data ?? res
+    if (Array.isArray(payload?.list)) {
+      tableData.value = payload.list
+    } else if (Array.isArray(payload)) {
+      tableData.value = payload
     } else {
       tableData.value = []
     }

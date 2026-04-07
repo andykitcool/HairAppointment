@@ -1,5 +1,5 @@
 import { Context } from 'koa'
-import { StaffModel } from '../models/index.js'
+import { AdminModel, MerchantModel, ServiceModel, StaffModel } from '../models/index.js'
 import { generateShortId } from '../../../shared/dist/index.js'
 
 /**
@@ -17,6 +17,28 @@ export async function getStaffList(ctx: Context) {
     const list = await StaffModel.find({ merchant_id, is_active: true })
       .sort({ create_time: 1 })
       .lean()
+
+    if (list.length === 0) {
+      const merchant = await MerchantModel.findOne({ merchant_id }).lean()
+      if (merchant) {
+        const ownerAdmin = merchant.owner_id ? await AdminModel.findById(merchant.owner_id).lean() : null
+        const ownerName = ownerAdmin?.real_name || merchant.name || '店长'
+        const services = await ServiceModel.find({ merchant_id, is_active: true }).select({ service_id: 1 }).lean()
+        const defaultOwnerStaffId = merchant.owner_id || `${merchant_id}_owner`
+        const defaultOwnerRow = {
+          staff_id: defaultOwnerStaffId,
+          merchant_id,
+          name: ownerName,
+          title: '店长',
+          phone: merchant.phone || '',
+          is_active: true,
+          is_default_owner: true,
+          service_ids: services.map((s: any) => s.service_id),
+        }
+        ctx.body = { code: 0, message: 'ok', data: { list: [defaultOwnerRow] } }
+        return
+      }
+    }
 
     ctx.body = { code: 0, message: 'ok', data: { list } }
   } catch (err: any) {
@@ -62,10 +84,15 @@ export async function updateStaff(ctx: Context) {
   const { name, title, phone, service_ids, is_active } = ctx.request.body as any
 
   try {
-    await StaffModel.updateOne(
+    const updated = await StaffModel.updateOne(
       { staff_id: id },
       { name, title, phone, service_ids, is_active }
     )
+
+    if (!updated.matchedCount) {
+      ctx.body = { code: 404, message: '员工不存在', data: null }
+      return
+    }
 
     ctx.body = { code: 0, message: '更新成功', data: null }
   } catch (err: any) {
@@ -79,9 +106,21 @@ export async function updateStaff(ctx: Context) {
  */
 export async function deleteStaff(ctx: Context) {
   const { id } = ctx.params
+  const { merchant_id } = ctx.query as any
 
   try {
-    await StaffModel.updateOne({ staff_id: id }, { is_active: false })
+    const merchant = merchant_id ? await MerchantModel.findOne({ merchant_id }).lean() : null
+    if (merchant && id === (merchant.owner_id || `${merchant_id}_owner`)) {
+      ctx.body = { code: 400, message: '默认店长员工不可删除', data: null }
+      return
+    }
+
+    const updated = await StaffModel.updateOne({ staff_id: id }, { is_active: false })
+    if (!updated.matchedCount) {
+      ctx.body = { code: 404, message: '员工不存在', data: null }
+      return
+    }
+
     ctx.body = { code: 0, message: '删除成功', data: null }
   } catch (err: any) {
     ctx.status = 500

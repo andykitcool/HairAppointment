@@ -1,7 +1,7 @@
 import Router from 'koa-router'
-import * as appointmentController from '../controllers/appointment'
-import { authMiddleware, requireOwner } from '../middleware/auth'
-import { cozeAuthMiddleware } from '../middleware/auth'
+import * as appointmentController from '../controllers/appointment.js'
+import { authMiddleware, ownerOrCozeAuthMiddleware, requireOwner } from '../middleware/auth.js'
+import { cozeAuthMiddleware } from '../middleware/auth.js'
 
 const router = new Router({ prefix: '/api' })
 
@@ -18,8 +18,8 @@ router.post('/appointments/:id/confirm', authMiddleware, requireOwner, appointme
 
 // COZE 专用
 router.post('/appointments/walk-in', cozeAuthMiddleware, appointmentController.walkIn)
-router.post('/appointments/:id/start', cozeAuthMiddleware, appointmentController.startService)
-router.post('/appointments/:id/complete', cozeAuthMiddleware, appointmentController.completeService)
-router.post('/appointments/:id/no-show', cozeAuthMiddleware, appointmentController.markNoShow)
+router.post('/appointments/:id/start', ownerOrCozeAuthMiddleware, appointmentController.startService)
+router.post('/appointments/:id/complete', ownerOrCozeAuthMiddleware, appointmentController.completeService)
+router.post('/appointments/:id/no-show', ownerOrCozeAuthMiddleware, appointmentController.markNoShow)
 
 export default router

@@ -1,6 +1,6 @@
 import cron from 'node-cron'
-import { AppointmentModel, MerchantModel } from '../models'
-import { AUTO_CONFIRM_TIMEOUT, SYNC_MAX_RETRY, SyncStatus } from '../../../shared/src/index'
+import { AppointmentModel, MerchantModel } from '../models/index.js'
+import { AUTO_CONFIRM_TIMEOUT, SYNC_MAX_RETRY, SyncStatus } from '../../../shared/dist/index.js'
 
 let isRunning = false
 
@@ -96,7 +96,7 @@ export function initCronJobs() {
   // 每 10 分钟：重试失败的飞书同步
   cron.schedule('*/10 * * * *', async () => {
     try {
-      const { SyncLogModel } = await import('../models')
+      const { SyncLogModel } = await import('../models/index.js')
       const failedLogs = await SyncLogModel.find({
         status: SyncStatus.FAILED,
         retry_count: { $lt: SYNC_MAX_RETRY },

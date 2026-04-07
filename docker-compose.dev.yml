@@ -46,7 +46,7 @@ services:
       - WX_APPSECRET=${WX_APPSECRET}
     command: >
       sh -c "
-        npm install koa koa-router koa-body @koa/cors mongoose ioredis bcryptjs jsonwebtoken dotenv node-cron axios dayjs @paralleldrive/cuid2 @noble/hashes miniprogram-ci &&
+        npm install koa koa-router koa-body @koa/cors mongoose ioredis bcryptjs jsonwebtoken dotenv node-cron axios dayjs @paralleldrive/cuid2 @noble/hashes miniprogram-ci nodemailer &&
         node packages/server/dist/app.js
       "
     depends_on:

@@ -28,9 +28,8 @@ const StaffSchema = new Schema<IStaffDocument>({
   update_time: { type: Date, default: Date.now },
 })
 
-StaffSchema.pre('save', function (next) {
+StaffSchema.pre('save', function () {
   this.update_time = new Date()
-  next()
 })
 
 export const StaffModel = mongoose.model<IStaffDocument>('Staff', StaffSchema)

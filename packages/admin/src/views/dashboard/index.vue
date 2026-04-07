@@ -83,15 +83,18 @@ async function loadData() {
       statsApi.getRevenue({ merchant_id: mid, start_date: today, end_date: today }) as any,
       transactionApi.getList({ merchant_id: mid, pageSize: 10 }) as any,
     ])
-    const aptList = aptRes?.list || (Array.isArray(aptRes) ? aptRes : [])
+    const aptPayload = aptRes?.data ?? aptRes
+    const statsPayload = statsRes?.data ?? statsRes
+    const txPayload = txRes?.data ?? txRes
+    const aptList = aptPayload?.list || (Array.isArray(aptPayload) ? aptPayload : [])
     pendingList.value = aptList.filter((i: any) => i.status === 'pending')
     overview.value = {
       todayAppointments: aptList.length,
       pendingCount: pendingList.value.length,
-      todayRevenue: statsRes?.summary?.totalRevenue || 0,
-      totalCustomers: statsRes?.summary?.totalCustomers || 0,
+      todayRevenue: statsPayload?.summary?.totalRevenue || 0,
+      totalCustomers: statsPayload?.summary?.totalCustomers || 0,
     }
-    recentTransactions.value = txRes?.list || (Array.isArray(txRes) ? txRes : [])
+    recentTransactions.value = txPayload?.list || (Array.isArray(txPayload) ? txPayload : [])
   } catch (e) {
     console.error('Dashboard load error', e)
   }

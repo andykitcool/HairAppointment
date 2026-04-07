@@ -1,7 +1,29 @@
 import { Context } from 'koa'
-import { MerchantModel, ShopClosedPeriodModel, UserModel, ServiceModel, StaffModel } from '../models'
-import { AppointmentModel } from '../models'
-import { AppointmentStatus, generateShortId, PRESET_SERVICES } from '../../../shared/src/index'
+import { MerchantModel, UserModel, ServiceModel, StaffModel, AppointmentModel, TransactionModel, AdminModel } from '../models/index.js'
+import { AppointmentStatus, generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
+
+const DEFAULT_MEMBERSHIP_LEVELS = ['普通会员', '银卡会员', '金卡会员', '钻石会员']
+
+function normalizeMembershipLevels(levels: unknown): string[] {
+  if (!Array.isArray(levels)) return DEFAULT_MEMBERSHIP_LEVELS
+  const normalized = levels
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+
+  const deduped = Array.from(new Set(normalized))
+  return deduped.length > 0 ? deduped : DEFAULT_MEMBERSHIP_LEVELS
+}
+
+function ensureOwnerMerchantAccess(ctx: Context, merchantId: string): boolean {
+  const role = ctx.state.user?.role
+  const currentMerchantId = ctx.state.user?.merchant_id
+  if (role === 'owner' && currentMerchantId && currentMerchantId !== merchantId) {
+    ctx.status = 403
+    ctx.body = { code: 403, message: '无权访问其他门店数据', data: null }
+    return false
+  }
+  return true
+}
 
 /**
  * 获取商户信息
@@ -25,141 +47,245 @@ export async function updateMerchant(ctx: Context) {
   const { id } = ctx.params
   const body = ctx.request.body as any
 
-  await MerchantModel.updateOne({ merchant_id: id }, body)
+  // 允许更新的字段白名单
+  const allowedFields = [
+    'name', 'phone', 'address', 'description', 'business_hours',
+    'display_settings', 'latitude', 'longitude', 'notify_config', 'ai_image_settings'
+  ]
+  
+  const updateData: Record<string, any> = {}
+  for (const key of allowedFields) {
+    if (body[key] !== undefined) {
+      updateData[key] = body[key]
+    }
+  }
+
+  await MerchantModel.updateOne({ merchant_id: id }, updateData)
   ctx.body = { code: 0, message: '更新成功', data: null }
 }
 
 /**
- * 创建打烊时段
+ * 获取门店展示设置
  */
-export async function createClosedPeriod(ctx: Context) {
+export async function getDisplaySettings(ctx: Context) {
   const { id } = ctx.params
-  const { date, type, start_time, end_time, reason, cancel_appointments, notify_customers } = ctx.request.body as any
-  const userId = ctx.state.user._id
+  
+  const merchant = await MerchantModel.findOne(
+    { merchant_id: id },
+    { display_settings: 1, name: 1, phone: 1, address: 1 }
+  )
+  
+  if (!merchant) {
+    ctx.body = { code: 404, message: '门店不存在', data: null }
+    return
+  }
+  
+  ctx.body = { 
+    code: 0, 
+    message: 'ok', 
+    data: {
+      name: merchant.name,
+      phone: merchant.phone,
+      address: merchant.address,
+      display_settings: merchant.display_settings || {
+        hero_image: '',
+        owner_avatar: '',
+        owner_title: '店长',
+        theme_color: '#1890ff',
+        welcome_text: '欢迎预约，我们将为您提供专业服务',
+      }
+    } 
+  }
+}
 
-  if (!date || !type) {
-    ctx.body = { code: 400, message: '缺少必填字段', data: null }
+/**
+ * 更新门店展示设置
+ */
+export async function updateDisplaySettings(ctx: Context) {
+  const { id } = ctx.params
+  const { hero_image, owner_avatar, owner_title, theme_color, welcome_text } = ctx.request.body as any
+  
+  const merchant = await MerchantModel.findOne({ merchant_id: id })
+  if (!merchant) {
+    ctx.body = { code: 404, message: '门店不存在', data: null }
+    return
+  }
+  
+  const displaySettings = {
+    hero_image: hero_image ?? merchant.display_settings?.hero_image ?? '',
+    owner_avatar: owner_avatar ?? merchant.display_settings?.owner_avatar ?? '',
+    owner_title: owner_title ?? merchant.display_settings?.owner_title ?? '店长',
+    theme_color: theme_color ?? merchant.display_settings?.theme_color ?? '#1890ff',
+    welcome_text: welcome_text ?? merchant.display_settings?.welcome_text ?? '欢迎预约，我们将为您提供专业服务',
+  }
+  
+  await MerchantModel.updateOne(
+    { merchant_id: id },
+    { display_settings: displaySettings }
+  )
+  
+  ctx.body = { code: 0, message: '设置已保存', data: displaySettings }
+}
+
+/**
+ * 获取顾客设置（会员级别字典）
+ */
+export async function getCustomerSettings(ctx: Context) {
+  const { id } = ctx.params
+  const merchant = await MerchantModel.findOne({ merchant_id: id }, { customer_settings: 1 })
+
+  if (!merchant) {
+    ctx.body = { code: 404, message: '门店不存在', data: null }
     return
   }
 
-  const period = await ShopClosedPeriodModel.create({
+  const membershipLevels = normalizeMembershipLevels(merchant.customer_settings?.membership_levels)
+  ctx.body = {
+    code: 0,
+    message: 'ok',
+    data: {
+      membership_levels: membershipLevels,
+    },
+  }
+}
+
+/**
+ * 更新顾客设置（会员级别字典）
+ */
+export async function updateCustomerSettings(ctx: Context) {
+  const { id } = ctx.params
+  if (!ensureOwnerMerchantAccess(ctx, id)) return
+
+  const body = (ctx.request.body || {}) as any
+  const membershipLevels = normalizeMembershipLevels(body.membership_levels)
+
+  const merchant = await MerchantModel.findOne({ merchant_id: id })
+  if (!merchant) {
+    ctx.body = { code: 404, message: '门店不存在', data: null }
+    return
+  }
+
+  await MerchantModel.updateOne(
+    { merchant_id: id },
+    { customer_settings: { membership_levels: membershipLevels } }
+  )
+
+  ctx.body = {
+    code: 0,
+    message: '顾客设置已保存',
+    data: {
+      membership_levels: membershipLevels,
+    },
+  }
+}
+
+/**
+ * 发送门店数据备份到店长邮箱
+ */
+export async function sendBackupEmail(ctx: Context) {
+  const { id } = ctx.params
+  if (!ensureOwnerMerchantAccess(ctx, id)) return
+
+  const adminId = ctx.state.user?._id
+  if (!adminId) {
+    ctx.body = { code: 401, message: '未登录', data: null }
+    return
+  }
+
+  const admin = await AdminModel.findById(adminId)
+  if (!admin) {
+    ctx.body = { code: 404, message: '管理员不存在', data: null }
+    return
+  }
+
+  if (!admin.email) {
+    ctx.body = { code: 400, message: '请先在个人设置中绑定邮箱', data: null }
+    return
+  }
+
+  const merchant = await MerchantModel.findOne({ merchant_id: id }).lean()
+  if (!merchant) {
+    ctx.body = { code: 404, message: '门店不存在', data: null }
+    return
+  }
+
+  const [staff, services, appointments, transactions] = await Promise.all([
+    StaffModel.find({ merchant_id: id }).lean(),
+    ServiceModel.find({ merchant_id: id }).lean(),
+    AppointmentModel.find({ merchant_id: id }).lean(),
+    TransactionModel.find({ merchant_id: id }).lean(),
+  ])
+
+  const customerIds = Array.from(new Set(
+    appointments
+      .map((item: any) => String(item.customer_id || ''))
+      .filter(Boolean)
+  ))
+
+  const customers = customerIds.length > 0
+    ? await UserModel.find({ _id: { $in: customerIds } }).lean()
+    : []
+
+  const backupPayload = {
+    version: '1.0.0',
+    export_time: new Date().toISOString(),
     merchant_id: id,
-    date,
-    type,
-    start_time,
-    end_time,
-    reason,
-    cancel_appointments: cancel_appointments || false,
-    notify_customers: notify_customers || false,
-    created_by: userId.toString(),
+    merchant,
+    staff,
+    services,
+    appointments,
+    transactions,
+    customers,
+  }
+
+  const smtpHost = process.env.SMTP_HOST || ''
+  const smtpPort = Number(process.env.SMTP_PORT || 465)
+  const smtpUser = process.env.SMTP_USER || ''
+  const smtpPass = process.env.SMTP_PASS || ''
+  const smtpFrom = process.env.SMTP_FROM || smtpUser
+
+  if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
+    ctx.body = { code: 500, message: '邮箱服务未配置（缺少 SMTP_HOST/SMTP_USER/SMTP_PASS/SMTP_FROM）', data: null }
+    return
+  }
+
+  const nodemailer = await import('nodemailer')
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
   })
 
-  // 如果需要自动取消预约
-  if (cancel_appointments) {
-    const query: Record<string, any> = {
-      merchant_id: id,
-      date,
-      status: { $in: ['pending', 'confirmed'] },
-    }
-    if (type === 'time_range' && start_time && end_time) {
-      query.start_time = { $gte: start_time, $lt: end_time }
-    }
-    await AppointmentModel.updateMany(query, { status: 'cancelled' })
+  const now = new Date()
+  const dateText = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`
+  const fileName = `backup_${id}_${dateText}.json`
 
-    // TODO: 发送取消通知
+  await transporter.sendMail({
+    from: smtpFrom,
+    to: admin.email,
+    subject: `【美发预约系统】门店数据备份 - ${merchant.name || id}`,
+    text: `您好，\n\n附件为门店 ${merchant.name || id} 的数据备份文件。\n导出时间：${new Date().toLocaleString('zh-CN')}\n\n请妥善保存。`,
+    attachments: [
+      {
+        filename: fileName,
+        content: JSON.stringify(backupPayload, null, 2),
+        contentType: 'application/json; charset=utf-8',
+      },
+    ],
+  })
+
+  ctx.body = {
+    code: 0,
+    message: `备份已发送至 ${admin.email}`,
+    data: {
+      to: admin.email,
+      file_name: fileName,
+    },
   }
-
-  ctx.body = { code: 0, message: '设置成功', data: { _id: period._id } }
-}
-
-/**
- * 获取打烊时段列表
- */
-export async function getClosedPeriods(ctx: Context) {
-  const { id } = ctx.params
-  const { start_date, end_date } = ctx.query as any
-
-  const query: Record<string, any> = { merchant_id: id }
-  if (start_date) query.date = { ...query.date, $gte: start_date }
-  if (end_date) query.date = { ...query.date, $lte: end_date }
-
-  const list = await ShopClosedPeriodModel.find(query).sort({ date: 1 })
-  ctx.body = { code: 0, message: 'ok', data: list }
-}
-
-/**
- * 删除打烊时段
- */
-export async function deleteClosedPeriod(ctx: Context) {
-  const { id, periodId } = ctx.params
-  await ShopClosedPeriodModel.findByIdAndDelete(periodId)
-  ctx.body = { code: 0, message: '已取消打烊', data: null }
-}
-
-/**
- * 设置延长营业时间
- */
-export async function setExtendedHours(ctx: Context) {
-  const { id } = ctx.params
-  const { start_date, end_date, extended_end } = ctx.request.body as any
-
-  if (!start_date || !end_date || !extended_end) {
-    ctx.body = { code: 400, message: '缺少必填字段', data: null }
-    return
-  }
-
-  await MerchantModel.updateOne(
-    { merchant_id: id },
-    { $push: { extended_hours: { start_date, end_date, extended_end } } },
-  )
-
-  ctx.body = { code: 0, message: '设置成功', data: null }
-}
-
-/**
- * 修改延长营业配置
- */
-export async function updateExtendedHours(ctx: Context) {
-  const { id, index } = ctx.params
-  const body = ctx.request.body as any
-  const idx = Number(index)
-
-  const merchant = await MerchantModel.findOne({ merchant_id: id })
-  if (!merchant?.extended_hours || !merchant.extended_hours[idx]) {
-    ctx.body = { code: 404, message: '配置不存在', data: null }
-    return
-  }
-
-  const key = `extended_hours.${idx}`
-  await MerchantModel.updateOne(
-    { merchant_id: id },
-    { $set: { [`${key}.start_date`]: body.start_date || merchant.extended_hours[idx].start_date,
-              [`${key}.end_date`]: body.end_date || merchant.extended_hours[idx].end_date,
-              [`${key}.extended_end`]: body.extended_end || merchant.extended_hours[idx].extended_end } },
-  )
-
-  ctx.body = { code: 0, message: '更新成功', data: null }
-}
-
-/**
- * 取消延长营业
- */
-export async function deleteExtendedHours(ctx: Context) {
-  const { id, index } = ctx.params
-  const idx = Number(index)
-
-  await MerchantModel.updateOne(
-    { merchant_id: id },
-    { $pull: { extended_hours: { $exists: true } } },
-  )
-  // 使用数组位置删除
-  const merchant = await MerchantModel.findOne({ merchant_id: id })
-  if (merchant?.extended_hours) {
-    merchant.extended_hours.splice(idx, 1)
-    await merchant.save()
-  }
-
-  ctx.body = { code: 0, message: '已取消延长营业', data: null }
 }
 
 /**
@@ -317,6 +443,99 @@ export async function getApplyStatus(ctx: Context) {
     }
   } catch (err: any) {
     console.error('[GetApplyStatus] Error:', err)
+    ctx.status = 500
+    ctx.body = { code: 500, message: err.message, data: null }
+  }
+}
+
+/**
+ * 搜索商户（按名称关键词）
+ * GET /api/merchants/search?name=xxx&page=1&limit=10
+ */
+export async function searchMerchants(ctx: Context) {
+  try {
+    const { name = '', page = '1', limit = '10' } = ctx.query as Record<string, string>
+    const pageNum = Math.max(1, parseInt(page))
+    const limitNum = Math.min(50, Math.max(1, parseInt(limit)))
+    const skip = (pageNum - 1) * limitNum
+
+    const query: Record<string, any> = { status: 'active' }
+    if (name.trim()) {
+      query.name = { $regex: name.trim(), $options: 'i' }
+    }
+
+    const [merchants, total] = await Promise.all([
+      MerchantModel.find(query, {
+        merchant_id: 1, name: 1, address: 1, phone: 1,
+        description: 1, cover_image: 1, display_settings: 1,
+        latitude: 1, longitude: 1, business_hours: 1
+      }).skip(skip).limit(limitNum).lean(),
+      MerchantModel.countDocuments(query)
+    ])
+
+    ctx.body = {
+      code: 0, message: 'ok',
+      data: { list: merchants, total, page: pageNum, limit: limitNum }
+    }
+  } catch (err: any) {
+    console.error('[SearchMerchants] Error:', err)
+    ctx.status = 500
+    ctx.body = { code: 500, message: err.message, data: null }
+  }
+}
+
+/**
+ * 获取附近商户（基于 Haversine 公式，默认半径 3km）
+ * GET /api/merchants/nearby?lat=31.23&lng=121.47&radius=3
+ */
+export async function getNearbyMerchants(ctx: Context) {
+  try {
+    const { lat, lng, radius = '3' } = ctx.query as Record<string, string>
+
+    if (!lat || !lng) {
+      ctx.body = { code: 400, message: '缺少 lat 或 lng 参数', data: null }
+      return
+    }
+
+    const userLat = parseFloat(lat)
+    const userLng = parseFloat(lng)
+    const maxRadius = parseFloat(radius)
+
+    if (isNaN(userLat) || isNaN(userLng) || isNaN(maxRadius)) {
+      ctx.body = { code: 400, message: '坐标或半径参数无效', data: null }
+      return
+    }
+
+    // 先筛出有坐标的活跃商户
+    const merchants = await MerchantModel.find(
+      { status: 'active', latitude: { $ne: null }, longitude: { $ne: null } },
+      {
+        merchant_id: 1, name: 1, address: 1, phone: 1,
+        description: 1, cover_image: 1, display_settings: 1,
+        latitude: 1, longitude: 1, business_hours: 1
+      }
+    ).lean()
+
+    // Haversine 公式计算距离（km）
+    const R = 6371
+    const toRad = (deg: number) => (deg * Math.PI) / 180
+
+    const nearby = merchants
+      .map((m) => {
+        const dLat = toRad((m.latitude as number) - userLat)
+        const dLng = toRad((m.longitude as number) - userLng)
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toRad(userLat)) * Math.cos(toRad(m.latitude as number)) * Math.sin(dLng / 2) ** 2
+        const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return { ...m, distance: Math.round(distance * 100) / 100 }
+      })
+      .filter((m) => m.distance <= maxRadius)
+      .sort((a, b) => a.distance - b.distance)
+
+    ctx.body = { code: 0, message: 'ok', data: { list: nearby, total: nearby.length } }
+  } catch (err: any) {
+    console.error('[GetNearbyMerchants] Error:', err)
     ctx.status = 500
     ctx.body = { code: 500, message: err.message, data: null }
   }

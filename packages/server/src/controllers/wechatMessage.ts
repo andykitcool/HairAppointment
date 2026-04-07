@@ -1,7 +1,7 @@
 import { Context } from 'koa'
 import crypto from 'crypto'
-import { getActiveServiceConfig } from './wechatConfig'
-import { handleWechatScanEvent, handleWechatBindEvent } from './auth'
+import { getActiveServiceConfig } from './wechatConfig.js'
+import { handleWechatScanEvent, handleWechatBindEvent } from './auth.js'
 
 /**
  * 验证微信服务器签名（用于服务器配置时的验证）

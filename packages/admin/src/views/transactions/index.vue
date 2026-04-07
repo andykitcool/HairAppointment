@@ -32,22 +32,43 @@
           <template #default="{ row }">{{ payLabel(row.payment_method) }}</template>
         </el-table-column>
         <el-table-column prop="note" label="备注" show-overflow-tooltip />
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="openDialog(row)">编辑</el-button>
+            <el-button size="small" type="danger" plain @click="deleteItem(row)">删除</el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-pagination v-if="total > pageSize" style="margin-top: 16px; justify-content: flex-end" background layout="prev, pager, next" :total="total" :page-size="pageSize" v-model:current-page="currentPage" @current-change="loadData" />
     </el-card>
 
     <!-- 新增记账弹窗 -->
-    <el-dialog v-model="dialogVisible" title="新增记账" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑记账' : '新增记账'" width="560px">
       <el-form :model="form" label-width="100px">
+        <el-form-item label="交易日期" required>
+          <el-date-picker v-model="form.transaction_date" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width: 300px" />
+        </el-form-item>
         <el-form-item label="顾客姓名" required>
-          <el-input v-model="form.customer_name" placeholder="输入顾客姓名" style="width: 300px" />
+          <el-select
+            v-model="form.customer_name"
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择或输入顾客姓名"
+            style="width: 300px"
+          >
+            <el-option v-for="c in customerOptions" :key="c.value" :label="c.label" :value="c.value" />
+          </el-select>
         </el-form-item>
         <el-form-item label="服务明细" required>
           <div style="width: 100%">
             <div v-for="(item, idx) in form.items" :key="idx" style="display: flex; gap: 8px; margin-bottom: 8px">
-              <el-input v-model="item.service_name" placeholder="服务名称" style="flex: 2" />
-              <el-input-number v-model="item.amount" :min="0" :precision="0" placeholder="金额(分)" style="flex: 1" />
+              <el-select v-model="item.service_name" placeholder="选择服务项目" style="flex: 2" filterable @change="onServiceChange(item)">
+                <el-option v-for="service in serviceOptions" :key="service.name" :label="service.name" :value="service.name" />
+              </el-select>
+              <el-input-number v-model="item.amountYuan" :min="0" :precision="2" placeholder="金额(元)" style="flex: 1" :controls="false" :disabled="true" />
               <el-input-number v-model="item.quantity" :min="1" placeholder="数量" style="width: 100px" />
               <el-button type="danger" plain size="small" @click="removeItem(idx)" :disabled="form.items.length <= 1">×</el-button>
             </div>
@@ -68,7 +89,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="onSubmit">确认记账</el-button>
+        <el-button type="primary" @click="onSubmit">{{ editingId ? '保存修改' : '确认记账' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -76,9 +97,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { transactionApi } from '@/api/request'
+import { customerApi, serviceApi, transactionApi } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const authStore = useAuthStore()
 const loading = ref(false)
@@ -88,6 +109,10 @@ const pageSize = 20
 const currentPage = ref(1)
 const filterDate = ref('')
 const dialogVisible = ref(false)
+const editingId = ref('')
+const servicePriceMap = ref<Record<string, number>>({})
+const serviceOptions = ref<Array<{ name: string; priceFen: number }>>([])
+const customerOptions = ref<Array<{ label: string; value: string }>>([])
 
 const payMethods = [
   { value: 'wechat', label: '微信支付' },
@@ -101,40 +126,148 @@ const payMethods = [
 const payLabel = (v: string) => payMethods.find(m => m.value === v)?.label || v
 
 const form = ref<any>({
+  transaction_date: '',
   customer_name: '',
-  items: [{ service_name: '', amount: 0, quantity: 1 }],
+  items: [{ service_name: '', amountYuan: 0, quantity: 1 }],
   payment_method: 'cash',
   note: '',
 })
 
-const totalYuan = computed(() => (form.value.items.reduce((s: number, i: any) => s + (i.amount || 0) * (i.quantity || 1), 0) / 100).toFixed(2))
+const totalYuan = computed(() => form.value.items.reduce((s: number, i: any) => s + (Number(i.amountYuan) || 0) * (i.quantity || 1), 0).toFixed(2))
 
-function addItem() { form.value.items.push({ service_name: '', amount: 0, quantity: 1 }) }
+function addItem() { form.value.items.push({ service_name: '', amountYuan: 0, quantity: 1 }) }
 function removeItem(idx: number) { form.value.items.splice(idx, 1) }
+function onServiceChange(item: any) {
+  const priceFen = servicePriceMap.value[(item?.service_name || '').trim()] || 0
+  item.amountYuan = priceFen / 100
+}
 
-function openDialog() {
-  form.value = { customer_name: '', items: [{ service_name: '', amount: 0, quantity: 1 }], payment_method: 'cash', note: '' }
+function createEmptyForm() {
+  return {
+    transaction_date: new Date().toISOString().slice(0, 10),
+    customer_name: '',
+    items: [{ service_name: '', amountYuan: 0, quantity: 1 }],
+    payment_method: 'cash',
+    note: '',
+  }
+}
+
+async function loadServicePriceMap() {
+  try {
+    const res = await serviceApi.getList({ merchant_id: authStore.user.merchantId }) as any
+    const payload = res?.data ?? res
+    const list = payload?.list || (Array.isArray(payload) ? payload : [])
+    const map: Record<string, number> = {}
+    const options: Array<{ name: string; priceFen: number }> = []
+    list.forEach((service: any) => {
+      const name = (service?.name || '').trim()
+      if (name) {
+        const priceFen = Number(service?.price) || 0
+        map[name] = priceFen
+        options.push({ name, priceFen })
+      }
+    })
+    servicePriceMap.value = map
+    serviceOptions.value = options
+  } catch (e) {
+    console.error('loadServicePriceMap failed', e)
+  }
+}
+
+async function loadCustomerOptions() {
+  try {
+    const res = await customerApi.getList({ merchant_id: authStore.user.merchantId, page: 1, pageSize: 500 }) as any
+    const payload = res?.data ?? res
+    const list = payload?.list || (Array.isArray(payload) ? payload : [])
+    const options = list
+      .map((customer: any) => {
+        const value = (customer?.real_name || customer?.nickname || '').trim()
+        if (!value) return null
+        const phone = (customer?.phone || '').trim()
+        return {
+          value,
+          label: phone ? `${value}（${phone}）` : value,
+        }
+      })
+      .filter(Boolean) as Array<{ label: string; value: string }>
+
+    const dedup = new Map<string, { label: string; value: string }>()
+    options.forEach((item) => {
+      if (!dedup.has(item.value)) dedup.set(item.value, item)
+    })
+    customerOptions.value = Array.from(dedup.values())
+  } catch (e) {
+    console.error('loadCustomerOptions failed', e)
+  }
+}
+
+function openDialog(row?: any) {
+  if (row) {
+    editingId.value = row.transaction_id
+    form.value = {
+      transaction_date: row.transaction_date || new Date().toISOString().slice(0, 10),
+      customer_name: row.customer_name || '',
+      items: (row.items || [{ service_name: '', amount: 0, quantity: 1 }]).map((item: any) => ({
+        service_name: item.service_name || '',
+        amountYuan: ((Number(item.amount) || 0) / 100),
+        quantity: item.quantity || 1,
+      })),
+      payment_method: row.payment_method || 'cash',
+      note: row.note || '',
+    }
+  } else {
+    editingId.value = ''
+    form.value = createEmptyForm()
+  }
   dialogVisible.value = true
 }
 
 async function onSubmit() {
   if (!form.value.customer_name.trim()) return ElMessage.warning('请输入顾客姓名')
-  const validItems = form.value.items.filter((i: any) => i.service_name.trim() && i.amount > 0)
+  if (!form.value.transaction_date) return ElMessage.warning('请选择交易日期')
+  const validItems = form.value.items
+    .map((i: any) => ({
+      service_name: (i?.service_name || '').trim(),
+      amount: Math.round((Number(i?.amountYuan) || 0) * 100),
+      quantity: i?.quantity || 1,
+    }))
+    .filter((i: any) => i.service_name && i.amount > 0)
   if (validItems.length === 0) return ElMessage.warning('请添加有效服务项目')
   try {
-    await transactionApi.create({
+    const payload = {
       merchant_id: authStore.user.merchantId,
       customer_name: form.value.customer_name.trim(),
       staff_id: '',
       total_amount: validItems.reduce((s: number, i: any) => s + i.amount * i.quantity, 0),
       items: validItems,
       payment_method: form.value.payment_method,
+      transaction_date: form.value.transaction_date,
       note: form.value.note.trim() || undefined,
-    })
-    ElMessage.success('记账成功')
+    }
+
+    if (editingId.value) {
+      await transactionApi.update(editingId.value, payload)
+      ElMessage.success('记账已更新')
+    } else {
+      await transactionApi.create(payload)
+      ElMessage.success('记账成功')
+    }
+
     dialogVisible.value = false
+    editingId.value = ''
     await loadData()
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || '失败') }
+}
+
+async function deleteItem(row: any) {
+  await ElMessageBox.confirm(`确认删除交易「${row.transaction_id}」？`, '确认')
+  try {
+    await transactionApi.delete(row.transaction_id)
+    ElMessage.success('交易已删除')
+    await loadData()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.message || '删除失败')
+  }
 }
 
 async function loadData() {
@@ -143,13 +276,19 @@ async function loadData() {
     const params: any = { merchant_id: authStore.user.merchantId, page: currentPage.value, pageSize }
     if (filterDate.value) params.transaction_date = filterDate.value
     const res = await transactionApi.getList(params) as any
-    tableData.value = res?.list || (Array.isArray(res) ? res : [])
-    total.value = res?.total || tableData.value.length
+    const payload = res?.data ?? res
+    tableData.value = payload?.list || (Array.isArray(payload) ? payload : [])
+    total.value = payload?.total ?? tableData.value.length
   } catch (e) { console.error(e) }
   finally { loading.value = false }
 }
 
-onMounted(() => loadData())
+onMounted(() => {
+  form.value = createEmptyForm()
+  loadCustomerOptions()
+  loadServicePriceMap()
+  loadData()
+})
 </script>
 
 <style scoped>

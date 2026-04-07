@@ -74,7 +74,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { appointmentApi } from '@/api/request'
+import { appointmentApi, serviceApi } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -110,7 +110,21 @@ const statusTagType = (s: string) => ({ pending: 'warning', confirmed: 'success'
 const sourceLabel = (s: string) => ({ mini_program: '小程序', coze: 'COZE', feishu: '飞书', web: 'Web' }[s] || s || '-')
 
 const completeDialogVisible = ref(false)
-const completeForm = ref<any>({ appointment_id: '', customer_name: '', service_name: '', amountYuan: 0, payment_method: 'cash' })
+const servicePriceMap = ref<Record<string, number>>({})
+const completeForm = ref<any>({ appointment_id: '', customer_name: '', service_name: '', amountYuan: 0, payment_method: 'wechat' })
+
+async function loadServicePrices() {
+  try {
+    const res = await serviceApi.getList({ merchant_id: authStore.user.merchantId }) as any
+    const payload = res?.data ?? res
+    const list = payload?.list || (Array.isArray(payload) ? payload : [])
+    servicePriceMap.value = Object.fromEntries(
+      list.map((service: any) => [service.service_id, Number(service.price) || 0])
+    )
+  } catch (e) {
+    console.error('Load service prices failed', e)
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -119,9 +133,13 @@ async function loadData() {
     if (filterDate.value) params.date = filterDate.value
     if (filterStatus.value) params.status = filterStatus.value
     const res = await appointmentApi.getList(params) as any
-    tableData.value = res?.list || (Array.isArray(res) ? res : [])
-    total.value = res?.total || tableData.value.length
-  } catch (e) { console.error(e) }
+    const payload = res?.data ?? res
+    tableData.value = payload?.list || (Array.isArray(payload) ? payload : [])
+    total.value = payload?.total ?? tableData.value.length
+  } catch (e: any) {
+    console.error(e)
+    ElMessage.error(e?.response?.data?.message || '加载预约失败')
+  }
   finally { loading.value = false }
 }
 
@@ -142,14 +160,21 @@ async function startApt(row: any) {
 }
 
 function completeApt(row: any) {
-  completeForm.value = { appointment_id: row.appointment_id, customer_name: row.customer_name, service_name: row.service_name, amountYuan: 0, payment_method: 'cash' }
+  const servicePriceFen = Number(servicePriceMap.value[row.service_id]) || 0
+  completeForm.value = {
+    appointment_id: row.appointment_id,
+    customer_name: row.customer_name,
+    service_name: row.service_name,
+    amountYuan: servicePriceFen / 100,
+    payment_method: 'wechat',
+  }
   completeDialogVisible.value = true
 }
 
 async function submitComplete() {
   try {
     await appointmentApi.complete(completeForm.value.appointment_id, {
-      amount: Math.round(completeForm.value.amountYuan * 100),
+      total_amount: Math.round(completeForm.value.amountYuan * 100),
       payment_method: completeForm.value.payment_method,
     })
     ElMessage.success('已完成并记账')
@@ -176,7 +201,10 @@ async function cancelApt(row: any) {
   } catch (e: any) { ElMessage.error(e?.response?.data?.message || '操作失败') }
 }
 
-onMounted(() => loadData())
+onMounted(() => {
+  loadServicePrices()
+  loadData()
+})
 </script>
 
 <style scoped>

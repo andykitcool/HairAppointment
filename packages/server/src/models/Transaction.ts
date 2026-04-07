@@ -11,7 +11,8 @@ export interface ITransactionDocument extends Document {
   merchant_id: string
   appointment_id?: string
   customer_id?: string
-  customer_name: string
+  customer_name?: string
+  customer_source: 'appointment' | 'walk_in'  // 顾客来源：预约/直接到店
   staff_id: string
   staff_name: string
   total_amount: number
@@ -30,7 +31,8 @@ const TransactionSchema = new Schema<ITransactionDocument>({
   merchant_id: { type: String, required: true, index: true },
   appointment_id: { type: String, index: true },
   customer_id: { type: String },
-  customer_name: { type: String, required: true },
+  customer_name: { type: String },
+  customer_source: { type: String, required: true, enum: ['appointment', 'walk_in'], default: 'walk_in' },
   staff_id: { type: String, required: true },
   staff_name: { type: String, required: true },
   total_amount: { type: Number, required: true },
@@ -48,9 +50,8 @@ const TransactionSchema = new Schema<ITransactionDocument>({
   update_time: { type: Date, default: Date.now },
 })
 
-TransactionSchema.pre('save', function (next) {
+TransactionSchema.pre('save', function () {
   this.update_time = new Date()
-  next()
 })
 
 TransactionSchema.index({ merchant_id: 1, transaction_date: 1 })

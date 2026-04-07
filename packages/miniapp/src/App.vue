@@ -2,15 +2,20 @@
 import { onLaunch, onShow, onHide } from '@dcloudio/uni-app'
 import { authApi } from '@/api/request'
 import { useUserStore } from '@/stores/user'
+import { useMerchantStore } from '@/stores/merchant'
 
-onLaunch(() => {
+let lastHandledEntryKey = ''
+
+onLaunch((options: any) => {
   console.log('App Launch')
   // 全局初始化
   initApp()
+  handleEntryRouting(options)
 })
 
-onShow(() => {
+onShow((options: any) => {
   console.log('App Show')
+  handleEntryRouting(options)
 })
 
 onHide(() => {
@@ -38,6 +43,76 @@ async function initApp() {
   // 获取系统信息
   const systemInfo = uni.getSystemInfoSync()
   console.log('System Info:', systemInfo.platform, systemInfo.system)
+}
+
+function parseQueryFromPath(path: string): Record<string, string> {
+  const idx = path.indexOf('?')
+  if (idx < 0) return {}
+  const raw = path.slice(idx + 1)
+  const out: Record<string, string> = {}
+  raw.split('&').forEach((part) => {
+    const [k, v] = part.split('=')
+    if (k) out[decodeURIComponent(k)] = decodeURIComponent(v || '')
+  })
+  return out
+}
+
+function parseMerchantIdFromScene(sceneRaw: string): string {
+  if (!sceneRaw) return ''
+  let scene = sceneRaw
+  try {
+    scene = decodeURIComponent(sceneRaw)
+  } catch {
+    scene = sceneRaw
+  }
+
+  const params: Record<string, string> = {}
+  if (scene.includes('=')) {
+    scene.split('&').forEach((part) => {
+      const [k, v] = part.split('=')
+      if (k) params[k] = v || ''
+    })
+  }
+
+  const byKey = params.merchant_id || params.mid || params.m || ''
+  if (byKey) return byKey
+
+  // 兼容 scene 直接传 merchant_id 的情况
+  if (/^M[\w-]+$/.test(scene)) {
+    return scene
+  }
+  return ''
+}
+
+function extractMerchantId(options: any): string {
+  if (!options) return ''
+  const q = options.query || {}
+  if (q.merchant_id) return String(q.merchant_id)
+
+  if (options.path) {
+    const pathQuery = parseQueryFromPath(String(options.path))
+    if (pathQuery.merchant_id) return pathQuery.merchant_id
+  }
+
+  if (q.scene) {
+    const fromScene = parseMerchantIdFromScene(String(q.scene))
+    if (fromScene) return fromScene
+  }
+  return ''
+}
+
+function handleEntryRouting(options: any) {
+  const merchantId = extractMerchantId(options)
+  if (!merchantId) return
+
+  const entryKey = `${merchantId}|${options?.path || ''}|${options?.query?.scene || ''}`
+  if (lastHandledEntryKey === entryKey) return
+  lastHandledEntryKey = entryKey
+
+  const merchantStore = useMerchantStore()
+  merchantStore.setMerchant({ merchant_id: merchantId })
+
+  uni.reLaunch({ url: `/pages/index/index?merchant_id=${merchantId}` })
 }
 
 async function silentWechatLogin() {

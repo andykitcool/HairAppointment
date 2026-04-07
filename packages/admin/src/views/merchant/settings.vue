@@ -20,6 +20,13 @@
             <el-form-item label="门店介绍">
               <el-input v-model="form.description" type="textarea" :rows="2" placeholder="请输入门店介绍" />
             </el-form-item>
+            <el-form-item label="门店位置">
+              <div class="location-picker-row">
+                <el-input :model-value="form.latitude ?? ''" placeholder="纬度" readonly class="location-input" />
+                <el-input :model-value="form.longitude ?? ''" placeholder="经度" readonly class="location-input" />
+                <el-button type="primary" plain @click="openMapPicker">地图选点</el-button>
+              </div>
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="saveBasicInfo" :loading="saving">保存</el-button>
             </el-form-item>
@@ -45,7 +52,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-form-item label="首页头图">
+            <el-form-item label="门店头图">
               <div class="image-section">
                 <!-- 已上传图片显示 -->
                 <div v-if="displayForm.hero_image" class="image-preview-wrapper">
@@ -75,6 +82,36 @@
                   <el-icon class="hero-image-uploader-icon"><Plus /></el-icon>
                 </el-upload>
                 <div v-if="displayForm.hero_image" class="image-tip">点击图片可重新上传</div>
+              </div>
+            </el-form-item>
+            <el-form-item label="店长头像">
+              <div class="image-section">
+                <div v-if="displayForm.owner_avatar" class="avatar-preview-wrapper">
+                  <img
+                    :src="displayForm.owner_avatar"
+                    class="owner-avatar-preview"
+                    @click="triggerAvatarUpload"
+                    @error="handleAvatarImageError"
+                  />
+                  <div class="image-overlay">
+                    <el-button type="danger" size="small" plain @click="removeOwnerAvatar">删除</el-button>
+                  </div>
+                </div>
+                <el-upload
+                  v-else
+                  ref="uploadAvatarRef"
+                  class="owner-avatar-uploader"
+                  action="/api/upload/image"
+                  :headers="uploadHeaders"
+                  :show-file-list="false"
+                  :on-success="handleAvatarUploadSuccess"
+                  :on-error="handleUploadError"
+                  :before-upload="beforeUpload"
+                  accept="image/*"
+                >
+                  <el-icon class="hero-image-uploader-icon"><Plus /></el-icon>
+                </el-upload>
+                <div v-if="displayForm.owner_avatar" class="image-tip">点击头像可重新上传</div>
               </div>
             </el-form-item>
             <el-form-item label="欢迎语">
@@ -180,96 +217,23 @@
       </el-col>
     </el-row>
 
-    <!-- 第三行：打烊管理 -->
-    <el-row :gutter="16" style="margin-top: 16px">
-      <el-col :span="24">
-        <el-card>
-          <template #header>
-            <div class="card-header-with-action">
-              <span class="card-title">临时打烊管理</span>
-              <el-button type="primary" size="small" @click="showClosedDialog">+ 添加打烊</el-button>
-            </div>
-          </template>
-          <div v-if="closedList.length === 0" class="empty-text">
-            暂无打烊记录，点击右上角按钮添加
-          </div>
-          <el-table v-else :data="closedList" v-loading="loadingClosed" style="width: 100%">
-            <el-table-column prop="date" label="日期" width="120" />
-            <el-table-column label="类型" width="100">
-              <template #default="{ row }">
-                <el-tag v-if="row.type === 'full_day'" type="danger">全天休息</el-tag>
-                <el-tag v-else type="warning">部分时段</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="时间段" width="180">
-              <template #default="{ row }">
-                <span v-if="row.type === 'full_day'">-</span>
-                <span v-else>{{ row.start_time }} ~ {{ row.end_time }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="reason" label="原因" show-overflow-tooltip />
-            <el-table-column label="操作" width="100" fixed="right">
-              <template #default="{ row }">
-                <el-button type="danger" link size="small" @click="deleteClosed(row)">删除</el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <!-- 添加打烊弹窗 -->
-    <el-dialog v-model="closedDialogVisible" title="添加临时打烊" width="500px">
-      <el-form :model="closedForm" label-width="100px">
-        <el-form-item label="日期" required>
-          <el-date-picker
-            v-model="closedForm.date"
-            type="date"
-            placeholder="选择日期"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="类型" required>
-          <el-radio-group v-model="closedForm.type">
-            <el-radio label="full_day">全天休息</el-radio>
-            <el-radio label="time_range">部分时段</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="closedForm.type === 'time_range'" label="时间段" required>
-          <el-time-picker
-            v-model="closedForm.start_time"
-            placeholder="开始时间"
-            format="HH:mm"
-            value-format="HH:mm"
-            style="width: 48%"
-          />
-          <span style="margin: 0 8px">-</span>
-          <el-time-picker
-            v-model="closedForm.end_time"
-            placeholder="结束时间"
-            format="HH:mm"
-            value-format="HH:mm"
-            style="width: 48%"
-          />
-        </el-form-item>
-        <el-form-item label="原因">
-          <el-input v-model="closedForm.reason" placeholder="如：店庆休息、临时有事" />
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="mapDialogVisible" title="地图点选门店位置" width="760px" @open="initMapPicker">
+      <div class="map-tip">点击地图选择门店位置，确认后自动回填经纬度与门店地址。</div>
+      <div v-if="mapInitError" class="map-error">{{ mapInitError }}</div>
+      <div v-loading="mapLoading" class="map-container" ref="mapContainerRef"></div>
       <template #footer>
-        <el-button @click="closedDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveClosed" :loading="savingClosed">保存</el-button>
+        <el-button @click="mapDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmMapLocation">确认位置</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { merchantApi } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Plus, Check } from '@element-plus/icons-vue'
 
 const authStore = useAuthStore()
@@ -313,36 +277,142 @@ const defaultBusinessHours = () => ({
   sunday: defaultDaySchedule(),
 })
 
+type DaySchedule = ReturnType<typeof defaultDaySchedule>
+type BusinessHoursMap = Record<string, DaySchedule>
+
 const form = reactive({
   name: '',
   phone: '',
   address: '',
   description: '',
-  business_hours: defaultBusinessHours(),
+  latitude: null as number | null,
+  longitude: null as number | null,
+  business_hours: defaultBusinessHours() as BusinessHoursMap,
 })
 
 const displayForm = reactive({
   hero_image: '',
+  owner_avatar: '',
   owner_title: '店长',
   theme_color: '#1890ff',
   welcome_text: '欢迎预约，我们将为您提供专业服务',
 })
 
-// 打烊管理
-const closedList = ref<any[]>([])
-const loadingClosed = ref(false)
-const savingClosed = ref(false)
-const closedDialogVisible = ref(false)
-const closedForm = reactive({
-  date: '',
-  type: 'full_day' as 'full_day' | 'time_range',
-  start_time: '',
-  end_time: '',
-  reason: '',
-})
-
 // 上传请求头（添加认证）
 const uploadRef = ref<any>(null)
+const uploadAvatarRef = ref<any>(null)
+
+// 高德地图选点
+const AMAP_KEY = (import.meta as any).env?.VITE_AMAP_KEY || ''
+const mapDialogVisible = ref(false)
+const mapLoading = ref(false)
+const mapInitError = ref('')
+const mapContainerRef = ref<HTMLDivElement | null>(null)
+const pickedLocation = ref<{ lat: number; lng: number } | null>(null)
+let amapInstance: any = null
+let amapMarker: any = null
+let amapGeocoder: any = null
+let amapScriptPromise: Promise<void> | null = null
+
+function openMapPicker() {
+  mapDialogVisible.value = true
+}
+
+function loadAmapScript() {
+  if (window && (window as any).AMap) {
+    return Promise.resolve()
+  }
+  if (amapScriptPromise) return amapScriptPromise
+
+  amapScriptPromise = new Promise<void>((resolve, reject) => {
+    if (!AMAP_KEY) {
+      reject(new Error('未配置高德地图 Key，请在 admin 环境变量中设置 VITE_AMAP_KEY'))
+      return
+    }
+    const script = document.createElement('script')
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&plugin=AMap.Geocoder`
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('高德地图脚本加载失败'))
+    document.head.appendChild(script)
+  })
+
+  return amapScriptPromise
+}
+
+function setMapMarker(lng: number, lat: number) {
+  if (!amapInstance) return
+  const AMap = (window as any).AMap
+  if (!amapMarker) {
+    amapMarker = new AMap.Marker({
+      position: [lng, lat],
+      offset: new AMap.Pixel(-13, -30),
+    })
+    amapInstance.add(amapMarker)
+  } else {
+    amapMarker.setPosition([lng, lat])
+  }
+  pickedLocation.value = { lat, lng }
+}
+
+function reverseGeocode(lng: number, lat: number) {
+  if (!amapGeocoder) return
+  amapGeocoder.getAddress([lng, lat], (status: string, result: any) => {
+    if (status === 'complete' && result?.regeocode?.formattedAddress) {
+      form.address = result.regeocode.formattedAddress
+    }
+  })
+}
+
+async function initMapPicker() {
+  mapLoading.value = true
+  mapInitError.value = ''
+  try {
+    await nextTick()
+    await loadAmapScript()
+    const AMap = (window as any).AMap
+    if (!mapContainerRef.value) {
+      throw new Error('地图容器未准备好')
+    }
+
+    const initLng = Number(form.longitude) || 121.4737
+    const initLat = Number(form.latitude) || 31.2304
+
+    if (!amapInstance) {
+      amapInstance = new AMap.Map(mapContainerRef.value, {
+        zoom: 13,
+        center: [initLng, initLat],
+      })
+      amapGeocoder = new AMap.Geocoder()
+      amapInstance.on('click', (e: any) => {
+        const lng = Number(e?.lnglat?.lng)
+        const lat = Number(e?.lnglat?.lat)
+        if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+        setMapMarker(lng, lat)
+        reverseGeocode(lng, lat)
+      })
+    } else {
+      amapInstance.setZoomAndCenter(13, [initLng, initLat])
+    }
+
+    setMapMarker(initLng, initLat)
+  } catch (err: any) {
+    mapInitError.value = err?.message || '地图初始化失败'
+  } finally {
+    mapLoading.value = false
+  }
+}
+
+function confirmMapLocation() {
+  if (!pickedLocation.value) {
+    ElMessage.warning('请先点击地图选择位置')
+    return
+  }
+  form.latitude = Number(pickedLocation.value.lat.toFixed(6))
+  form.longitude = Number(pickedLocation.value.lng.toFixed(6))
+  mapDialogVisible.value = false
+  ElMessage.success('已回填门店位置')
+}
 
 const uploadHeaders = computed(() => {
   const token = localStorage.getItem('auth_token')
@@ -354,6 +424,10 @@ const uploadHeaders = computed(() => {
 // 触发上传
 function triggerUpload() {
   uploadRef.value?.$el?.querySelector('input')?.click()
+}
+
+function triggerAvatarUpload() {
+  uploadAvatarRef.value?.$el?.querySelector('input')?.click()
 }
 
 // 上传前的检查
@@ -386,6 +460,19 @@ function handleUploadSuccess(response: any) {
   }
 }
 
+function handleAvatarUploadSuccess(response: any) {
+  if (response.code === 0) {
+    const baseUrl = 'http://localhost:3100'
+    const imageUrl = response.data.url.startsWith('http')
+      ? response.data.url
+      : `${baseUrl}${response.data.url}`
+    displayForm.owner_avatar = imageUrl
+    ElMessage.success('头像上传成功，请记得点击"保存"按钮保存')
+  } else {
+    ElMessage.error(response.message || '上传失败')
+  }
+}
+
 // 上传失败
 function handleUploadError() {
   ElMessage.error('图片上传失败')
@@ -397,10 +484,20 @@ function removeHeroImage() {
   ElMessage.success('图片已删除，记得保存设置哦')
 }
 
+function removeOwnerAvatar() {
+  displayForm.owner_avatar = ''
+  ElMessage.success('头像已删除，记得保存设置哦')
+}
+
 // 图片加载失败
 function handleImageError() {
   console.error('[Settings] Image failed to load:', displayForm.hero_image)
   ElMessage.error('图片加载失败，URL: ' + displayForm.hero_image)
+}
+
+function handleAvatarImageError() {
+  console.error('[Settings] Avatar failed to load:', displayForm.owner_avatar)
+  ElMessage.error('头像加载失败，URL: ' + displayForm.owner_avatar)
 }
 
 async function loadData() {
@@ -416,7 +513,6 @@ async function loadData() {
 
   loading.value = true
   loadingDisplay.value = true
-  loadingClosed.value = true
 
   try {
     // 加载门店基本信息
@@ -430,6 +526,8 @@ async function loadData() {
       form.phone = data.phone || ''
       form.address = data.address || ''
       form.description = data.description || ''
+      form.latitude = data.latitude ?? null
+      form.longitude = data.longitude ?? null
       if (data.business_hours) {
         // 兼容旧数据结构
         const hours = data.business_hours
@@ -457,105 +555,35 @@ async function loadData() {
     console.log('[Settings] Display settings response:', displayRes)
     // 先重置，避免显示旧数据
     displayForm.hero_image = ''
+    displayForm.owner_avatar = ''
     if (displayRes?.code === 0 && displayRes.data) {
       const ds = displayRes.data.display_settings || {}
       console.log('[Settings] Display settings loaded:', ds)
       // 处理图片URL：确保使用正确的后端地址
       const baseUrl = 'http://localhost:3100'
       let heroImage = ds.hero_image || ''
+      let ownerAvatar = ds.owner_avatar || ''
       if (heroImage && !heroImage.startsWith('http')) {
         // 相对路径，添加后端地址前缀
         heroImage = `${baseUrl}${heroImage}`
       }
+      if (ownerAvatar && !ownerAvatar.startsWith('http')) {
+        ownerAvatar = `${baseUrl}${ownerAvatar}`
+      }
       // 使用 nextTick 确保 DOM 更新后再设置新值
       displayForm.hero_image = heroImage
+      displayForm.owner_avatar = ownerAvatar
       displayForm.owner_title = ds.owner_title || '店长'
       displayForm.theme_color = ds.theme_color || '#1890ff'
       displayForm.welcome_text = ds.welcome_text || '欢迎预约，我们将为您提供专业服务'
       console.log('[Settings] hero_image set to:', displayForm.hero_image)
     }
 
-    // 加载打烊列表
-    await loadClosedList()
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.message || '加载数据失败')
   } finally {
     loading.value = false
     loadingDisplay.value = false
-    loadingClosed.value = false
-  }
-}
-
-async function loadClosedList() {
-  const merchantId = authStore.user.merchantId
-  if (!merchantId) return
-  try {
-    const res = await merchantApi.getClosedPeriods(merchantId) as any
-    closedList.value = Array.isArray(res) ? res : (res?.list || [])
-  } catch (e) {
-    closedList.value = []
-  }
-}
-
-function showClosedDialog() {
-  closedForm.date = ''
-  closedForm.type = 'full_day'
-  closedForm.start_time = ''
-  closedForm.end_time = ''
-  closedForm.reason = ''
-  closedDialogVisible.value = true
-}
-
-async function saveClosed() {
-  const merchantId = authStore.user.merchantId
-  if (!merchantId) return
-
-  // 验证
-  if (!closedForm.date) {
-    ElMessage.warning('请选择日期')
-    return
-  }
-  if (closedForm.type === 'time_range' && (!closedForm.start_time || !closedForm.end_time)) {
-    ElMessage.warning('请选择时间段')
-    return
-  }
-
-  savingClosed.value = true
-  try {
-    await merchantApi.createClosedPeriod(merchantId, {
-      date: closedForm.date,
-      type: closedForm.type,
-      start_time: closedForm.type === 'time_range' ? closedForm.start_time : undefined,
-      end_time: closedForm.type === 'time_range' ? closedForm.end_time : undefined,
-      reason: closedForm.reason || undefined,
-    })
-    ElMessage.success('打烊设置已添加')
-    closedDialogVisible.value = false
-    await loadClosedList()
-  } catch (e: any) {
-    ElMessage.error(e?.response?.data?.message || '添加失败')
-  } finally {
-    savingClosed.value = false
-  }
-}
-
-async function deleteClosed(row: any) {
-  const merchantId = authStore.user.merchantId
-  if (!merchantId) return
-
-  try {
-    await ElMessageBox.confirm('确定删除这条打烊记录吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-    await merchantApi.deleteClosedPeriod(merchantId, row._id)
-    ElMessage.success('已删除')
-    await loadClosedList()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(e?.response?.data?.message || '删除失败')
-    }
   }
 }
 
@@ -574,6 +602,8 @@ async function saveBasicInfo() {
       phone: form.phone,
       address: form.address,
       description: form.description,
+      latitude: form.latitude,
+      longitude: form.longitude,
     })
     ElMessage.success('保存成功')
   } catch (e: any) {
@@ -609,7 +639,9 @@ async function saveDisplaySettings() {
     // 保存时提取相对路径（去掉任何域名部分）
     const baseUrl = 'http://localhost:3100'
     let heroImage = displayForm.hero_image
+    let ownerAvatar = displayForm.owner_avatar
     let relativePath = heroImage
+    let ownerAvatarRelativePath = ownerAvatar
     // 去掉后端地址前缀
     if (heroImage && heroImage.startsWith(baseUrl)) {
       relativePath = heroImage.replace(baseUrl, '')
@@ -619,9 +651,17 @@ async function saveDisplaySettings() {
       relativePath = heroImage.replace('http://localhost:9080', '')
     }
 
+    if (ownerAvatar && ownerAvatar.startsWith(baseUrl)) {
+      ownerAvatarRelativePath = ownerAvatar.replace(baseUrl, '')
+    }
+    else if (ownerAvatar && ownerAvatar.startsWith('http://localhost:9080')) {
+      ownerAvatarRelativePath = ownerAvatar.replace('http://localhost:9080', '')
+    }
+
     await merchantApi.updateDisplaySettings(merchantId, {
       ...displayForm,
       hero_image: relativePath,
+      owner_avatar: ownerAvatarRelativePath,
     })
     ElMessage.success('展示设置保存成功')
   } catch (e: any) {
@@ -642,6 +682,37 @@ onMounted(() => {
 .settings-page {
   padding: 0;
 }
+
+.location-picker-row {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+}
+
+.location-input {
+  width: 160px;
+}
+
+.map-tip {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 10px;
+}
+
+.map-error {
+  color: #f56c6c;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.map-container {
+  width: 100%;
+  height: 460px;
+  border: 1px solid #e4e7ed;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .card-title {
   font-weight: 600;
   font-size: 16px;
@@ -770,6 +841,26 @@ onMounted(() => {
   opacity: 1;
 }
 
+.avatar-preview-wrapper {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.avatar-preview-wrapper:hover .image-overlay {
+  opacity: 1;
+}
+
+.owner-avatar-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
 .image-tip {
   font-size: 12px;
   color: #909399;
@@ -804,6 +895,24 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.owner-avatar-uploader {
+  border: 1px dashed var(--el-border-color);
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: var(--el-transition-duration-fast);
+  width: 100px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.owner-avatar-uploader:hover {
+  border-color: var(--el-color-primary);
 }
 
 .image-preview-container {

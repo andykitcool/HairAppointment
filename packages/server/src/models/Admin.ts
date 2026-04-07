@@ -5,6 +5,7 @@ export interface IAdminDocument extends Document {
   password_hash: string
   real_name: string
   phone?: string
+  email?: string
   wx_openid?: string
   wx_unionid?: string
   is_active: boolean
@@ -21,6 +22,7 @@ const AdminSchema = new Schema<IAdminDocument>({
   password_hash: { type: String, required: true },
   real_name: { type: String, required: true },
   phone: { type: String, default: '' },
+  email: { type: String, default: '' },
   wx_openid: { type: String, default: '' },
   wx_unionid: { type: String, default: '' },
   is_active: { type: Boolean, required: true, default: true },
@@ -32,9 +34,8 @@ const AdminSchema = new Schema<IAdminDocument>({
   update_time: { type: Date, default: Date.now },
 })
 
-AdminSchema.pre('save', function (next) {
+AdminSchema.pre('save', function () {
   this.update_time = new Date()
-  next()
 })
 
 export const AdminModel = mongoose.model<IAdminDocument>('Admin', AdminSchema)

@@ -1,6 +1,6 @@
 import Router from 'koa-router'
-import * as authController from '../controllers/auth'
-import { authMiddleware, requireOwner } from '../middleware/auth'
+import * as authController from '../controllers/auth.js'
+import { authMiddleware, requireOwner } from '../middleware/auth.js'
 
 const router = new Router({ prefix: '/api/auth' })
 
@@ -29,6 +29,7 @@ router.get('/admin-info', authMiddleware, requireOwner, authController.getAdminI
 router.get('/admin/profile', authMiddleware, authController.getAdminProfile)
 router.put('/admin/password', authMiddleware, authController.changeAdminPassword)
 router.put('/admin/phone', authMiddleware, authController.bindAdminPhone)
+router.put('/admin/email', authMiddleware, authController.bindAdminEmail)
 router.put('/admin/wechat', authMiddleware, authController.bindAdminWechat)
 
 export default router

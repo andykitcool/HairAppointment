@@ -86,15 +86,20 @@
         <view v-else-if="availableSlots.length === 0 && !slotsClosed" class="loading-state">
           <text class="loading-text">暂无可用时段</text>
         </view>
-        <view v-else class="time-grid">
-          <view
-            v-for="slot in allSlots"
-            :key="slot.start"
-            class="time-slot"
-            :class="{ active: selectedTime === slot.start, disabled: !slot.available }"
-            @tap="slot.available && (selectedTime = slot.start)"
-          >
-            <text class="time-text">{{ slot.start }}</text>
+        <view v-else class="time-groups">
+          <view v-for="group in groupedSlots" :key="group.start" class="time-group">
+            <text v-if="groupedSlots.length > 1" class="time-group-label">{{ group.label }}</text>
+            <view class="time-grid">
+              <view
+                v-for="slot in group.slots"
+                :key="slot.start"
+                class="time-slot"
+                :class="{ active: selectedTime === slot.start, disabled: !slot.available }"
+                @tap="slot.available && (selectedTime = slot.start)"
+              >
+                <text class="time-text">{{ slot.start }}</text>
+              </view>
+            </view>
           </view>
         </view>
       </view>
@@ -175,7 +180,7 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const merchantStore = useMerchantStore()
-const DEFAULT_MERCHANT_ID = 'M_mock_001'
+const DEFAULT_MERCHANT_ID = 'M000001'
 
 const merchantId = ref('')
 const merchantName = ref('美发工作室')
@@ -194,9 +199,39 @@ const contactPhone = ref('')
 const submitting = ref(false)
 const loadingSlots = ref(false)
 const slotsClosed = ref(false)
+const businessIntervals = ref<Array<{ start: string; end: string }>>([]) 
 
 // 可用时段
 const availableSlots = computed(() => allSlots.value.filter((s: any) => s.available))
+
+function timeToMins(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+function intervalLabel(start: string): string {
+  const h = parseInt(start.split(':')[0], 10)
+  if (h < 12) return '上午'
+  if (h < 17) return '下午'
+  return '晚上'
+}
+
+// 按营业时段分组
+const groupedSlots = computed(() => {
+  if (!businessIntervals.value.length) {
+    return allSlots.value.length ? [{ label: '', slots: allSlots.value }] : []
+  }
+  return businessIntervals.value
+    .map((itv) => ({
+      label: intervalLabel(itv.start),
+      start: itv.start,
+      slots: allSlots.value.filter((s: any) => {
+        const m = timeToMins(s.start)
+        return m >= timeToMins(itv.start) && m < timeToMins(itv.end)
+      }),
+    }))
+    .filter((g) => g.slots.length > 0)
+})
 
 // 选中日期标签
 const selectedDateLabel = computed(() => {
@@ -269,8 +304,10 @@ async function loadSlots() {
     if (data?.closed) {
       slotsClosed.value = true
       allSlots.value = []
+      businessIntervals.value = []
     } else {
       allSlots.value = data?.slots || []
+      businessIntervals.value = data?.business_hours || []
     }
   } catch {
     allSlots.value = []
@@ -313,7 +350,7 @@ async function onSubmit() {
     void data
     uni.showToast({ title: '预约成功', icon: 'success' })
     setTimeout(() => {
-      uni.switchTab({ url: '/pages/appointment/list' })
+      uni.switchTab({ url: '/pages/index/index' })
     }, 1500)
   } catch (err: any) {
     uni.showToast({ title: err.message || '预约失败', icon: 'none' })
@@ -358,8 +395,8 @@ onLoad(async (query: any) => {
   const ok = await ensureLogin()
   if (!ok) return
 
-  merchantId.value = query?.merchantId || userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
-  const preServiceId = query?.serviceId || ''
+  merchantId.value = query?.merchantId || query?.merchant_id || userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
+  const preServiceId = query?.serviceId || query?.service_id || ''
   contactName.value = userStore.userInfo.realName || userStore.userInfo.nickname || ''
   contactPhone.value = userStore.userInfo.phone || ''
 
@@ -529,8 +566,18 @@ onLoad(async (query: any) => {
 }
 
 .service-card.selected {
-  border-color: #000;
-  background: #FAFAFA;
+  border-color: #07C160;
+  background: #07C160;
+}
+
+.service-card.selected .service-name,
+.service-card.selected .service-price {
+  color: #fff;
+}
+
+.service-card.selected .service-desc,
+.service-card.selected .service-dur {
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .service-info {
@@ -654,6 +701,25 @@ onLoad(async (query: any) => {
 .date-item.active .date-day,
 .date-item.active .date-month {
   color: #fff;
+}
+
+/* 时间段分组 */
+.time-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.time-group {
+  margin-bottom: 16rpx;
+}
+
+.time-group-label {
+  font-size: 24rpx;
+  color: #999;
+  display: block;
+  margin-bottom: 14rpx;
+  padding-left: 4rpx;
 }
 
 /* 时间段 */

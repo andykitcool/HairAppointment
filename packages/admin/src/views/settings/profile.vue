@@ -14,6 +14,10 @@
           <span v-if="profile.phone">{{ profile.phone }}</span>
           <el-tag v-else type="info" size="small">未绑定</el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="邮箱地址">
+          <span v-if="profile.email">{{ profile.email }}</span>
+          <el-tag v-else type="info" size="small">未绑定</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="微信绑定">
           <el-tag v-if="profile.wx_openid" type="success" size="small">已绑定</el-tag>
           <el-tag v-else type="info" size="small">未绑定</el-tag>
@@ -24,6 +28,9 @@
         <el-button type="primary" @click="showPasswordDialog = true">修改密码</el-button>
         <el-button type="primary" plain @click="showPhoneDialog = true">
           {{ profile.phone ? '更换手机号' : '绑定手机号' }}
+        </el-button>
+        <el-button type="primary" plain @click="openEmailDialog">
+          {{ profile.email ? '更换邮箱' : '绑定邮箱' }}
         </el-button>
         <el-button type="success" plain @click="showWechatDialog = true">
           {{ profile.wx_openid ? '更换微信' : '绑定微信' }}
@@ -47,6 +54,18 @@
       <template #footer>
         <el-button @click="showPasswordDialog = false">取消</el-button>
         <el-button type="primary" :loading="submitting" @click="handleChangePassword">确认修改</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showEmailDialog" :title="profile.email ? '更换邮箱' : '绑定邮箱'" width="400px" destroy-on-close>
+      <el-form :model="emailForm" :rules="emailRules" ref="emailFormRef" label-width="100px">
+        <el-form-item label="邮箱" prop="email">
+          <el-input v-model="emailForm.email" placeholder="请输入邮箱地址" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEmailDialog = false">取消</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleBindEmail">确认绑定</el-button>
       </template>
     </el-dialog>
 
@@ -90,7 +109,7 @@
         <div class="qr-wrapper" v-loading="qrLoading">
           <img v-if="qrCode" :src="qrCode" alt="微信绑定二维码" class="qr-code" />
           <div v-else class="qr-placeholder">
-            <el-icon :size="48" color="#909399"><Picture /></el-icon>
+            <span style="color:#909399;font-size:14px;">二维码生成中...</span>
             <p>正在生成二维码...</p>
           </div>
         </div>
@@ -106,19 +125,20 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Picture } from '@element-plus/icons-vue'
 import { authApi } from '@/api/request'
 
 const loading = ref(false)
 const submitting = ref(false)
 const showPasswordDialog = ref(false)
 const showPhoneDialog = ref(false)
+const showEmailDialog = ref(false)
 const showWechatDialog = ref(false)
 
 const profile = reactive({
   username: '',
   real_name: '',
   phone: '',
+  email: '',
   wx_openid: '',
 })
 
@@ -174,6 +194,27 @@ const phoneRules = {
   code: [
     { required: true, message: '请输入验证码', trigger: 'blur' },
     { len: 6, message: '验证码为6位数字', trigger: 'blur' },
+  ],
+}
+
+const emailFormRef = ref()
+const emailForm = reactive({
+  email: '',
+})
+
+const validateEmail = (_rule: any, value: string, callback: Function) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(value)) {
+    callback(new Error('请输入正确的邮箱地址'))
+  } else {
+    callback()
+  }
+}
+
+const emailRules = {
+  email: [
+    { required: true, message: '请输入邮箱地址', trigger: 'blur' },
+    { validator: validateEmail, trigger: 'blur' },
   ],
 }
 
@@ -265,6 +306,32 @@ async function handleBindPhone() {
       showPhoneDialog.value = false
       phoneForm.phone = ''
       phoneForm.code = ''
+    } else {
+      ElMessage.error(res.message || '绑定失败')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '绑定失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+function openEmailDialog() {
+  emailForm.email = profile.email || ''
+  showEmailDialog.value = true
+}
+
+async function handleBindEmail() {
+  const valid = await emailFormRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  submitting.value = true
+  try {
+    const res: any = await authApi.bindEmail({ email: emailForm.email })
+    if (res.code === 0) {
+      profile.email = emailForm.email
+      ElMessage.success('邮箱绑定成功')
+      showEmailDialog.value = false
     } else {
       ElMessage.error(res.message || '绑定失败')
     }

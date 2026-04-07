@@ -1,6 +1,6 @@
 import Router from 'koa-router'
-import * as serviceController from '../controllers/service'
-import { authMiddleware, requireOwner } from '../middleware/auth'
+import * as serviceController from '../controllers/service.js'
+import { authMiddleware, requireOwner } from '../middleware/auth.js'
 
 const router = new Router({ prefix: '/api/services' })
 

@@ -31,6 +31,77 @@
       </view>
     </view>
 
+    <!-- 我的预约（合并原预约页核心能力） -->
+    <view class="appointments-card">
+      <view class="appointments-head">
+        <text class="appointments-title">我的预约</text>
+        <view class="appointments-tabs">
+          <view
+            class="appointments-tab"
+            :class="{ 'appointments-tab-on': appointmentTab === 'current' }"
+            @tap="appointmentTab = 'current'"
+          >
+            <text>当前</text>
+          </view>
+          <view
+            class="appointments-tab"
+            :class="{ 'appointments-tab-on': appointmentTab === 'history' }"
+            @tap="appointmentTab = 'history'"
+          >
+            <text>历史</text>
+          </view>
+        </view>
+      </view>
+
+      <view v-if="appointmentLoading" class="appointments-status">加载中...</view>
+      <view v-else-if="displayAppointments.length === 0" class="appointments-status">
+        {{ appointmentTab === 'current' ? '暂无当前预约' : '暂无历史预约' }}
+      </view>
+      <view
+        v-for="item in displayAppointments"
+        :key="item._id || item.appointment_id"
+        class="appointment-item"
+        @tap="toggleAppointmentDetail(item)"
+      >
+        <view class="appointment-row">
+          <text class="appointment-name">{{ item.service_name || '服务项目' }}</text>
+          <text class="appointment-status">{{ statusText(item.status) }}</text>
+        </view>
+        <text class="appointment-time">{{ item.date }} {{ item.start_time }}-{{ item.end_time }}</text>
+        <text class="appointment-id">编号 {{ item.appointment_id }}</text>
+
+        <view v-if="isExpanded(item)" class="appointment-detail">
+          <view class="detail-row">
+            <text class="detail-label">发型师</text>
+            <text class="detail-value">{{ item.staff_name || '待分配' }}</text>
+          </view>
+          <view class="detail-row" v-if="item.note">
+            <text class="detail-label">备注</text>
+            <text class="detail-value">{{ item.note }}</text>
+          </view>
+          <view v-if="item.timeline && item.timeline.length > 0" class="timeline-list">
+            <view class="timeline-item" v-for="(stage, idx) in item.timeline" :key="idx">
+              <view class="timeline-dot" :class="{ 'timeline-dot-busy': stage.staff_busy }"></view>
+              <text class="timeline-name">{{ stage.stage_name }}</text>
+              <text class="timeline-time">{{ stage.start }}-{{ stage.end }}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="appointment-expand-hint">
+          <text class="appointment-expand-text">{{ isExpanded(item) ? '收起详情' : '查看详情' }}</text>
+        </view>
+
+        <view v-if="appointmentTab === 'history'" class="appointment-actions">
+          <button class="btn-rebook" @tap.stop="rebook(item)">再次预约</button>
+        </view>
+
+        <view v-if="canCancel(item.status)" class="appointment-actions">
+          <button class="btn-cancel-appointment" @tap.stop="cancelAppointment(item)">取消预约</button>
+        </view>
+      </view>
+    </view>
+
     <!-- 菜单列表 -->
     <view class="menu-section">
       <view class="menu-group">
@@ -134,11 +205,7 @@
       <view class="dev-card">
         <view class="dev-header">
           <text class="dev-title">开发环境</text>
-          <text class="dev-mode">{{ apiModeLabel }}</text>
-        </view>
-        <view class="dev-row">
-          <text class="dev-label">Mock 接口</text>
-          <switch :checked="useMock" color="#000000" @change="onMockToggle" />
+          <text class="dev-mode">真实接口</text>
         </view>
         <view class="dev-row" @tap="editBaseUrl">
           <text class="dev-label">接口地址</text>
@@ -146,7 +213,6 @@
         </view>
         <view class="dev-actions">
           <button class="btn-dev" @tap="editBaseUrl">修改地址</button>
-          <button class="btn-dev btn-dev-secondary" @tap="resetMockData">重置 Mock 数据</button>
         </view>
       </view>
     </view>
@@ -163,7 +229,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { authApi, getApiEnv, setMockEnabled, setApiBaseUrl, resetMockDb } from '@/api/request'
+import { authApi, appointmentApi, getApiEnv, setApiBaseUrl } from '@/api/request'
 import { useMerchantStore } from '@/stores/merchant'
 import { useUserStore } from '@/stores/user'
 
@@ -173,14 +239,104 @@ const merchantStore = useMerchantStore()
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const isOwner = computed(() => userStore.userInfo.role === 'owner')
 const userInfo = computed(() => userStore.userInfo)
-const useMock = ref(true)
 const apiBaseUrl = ref('')
-const apiModeLabel = computed(() => (useMock.value ? 'Mock 模式' : '真实接口'))
+const appointmentLoading = ref(false)
+const appointmentList = ref<any[]>([])
+const appointmentTab = ref<'current' | 'history'>('current')
+const expandedAppointmentId = ref('')
+
+const currentAppointments = computed(() =>
+  appointmentList.value.filter((a) => ['pending', 'confirmed', 'in_progress'].includes(a.status))
+)
+const historyAppointments = computed(() =>
+  appointmentList.value.filter((a) => ['completed', 'cancelled', 'no_show'].includes(a.status))
+)
+const displayAppointments = computed(() =>
+  appointmentTab.value === 'current' ? currentAppointments.value : historyAppointments.value
+)
 
 function syncApiEnv() {
   const env = getApiEnv()
-  useMock.value = env.useMock
   apiBaseUrl.value = env.baseUrl
+}
+
+function statusText(status: string): string {
+  const map: Record<string, string> = {
+    pending: '待确认',
+    confirmed: '已确认',
+    in_progress: '服务中',
+    completed: '已完成',
+    cancelled: '已取消',
+    no_show: '未到店',
+  }
+  return map[status] || status
+}
+
+function canCancel(status: string): boolean {
+  return status === 'pending' || status === 'confirmed'
+}
+
+function appointmentId(item: any): string {
+  return String(item?._id || item?.appointment_id || '')
+}
+
+function isExpanded(item: any): boolean {
+  return expandedAppointmentId.value === appointmentId(item)
+}
+
+function toggleAppointmentDetail(item: any) {
+  const id = appointmentId(item)
+  if (!id) return
+  expandedAppointmentId.value = expandedAppointmentId.value === id ? '' : id
+}
+
+async function loadAppointments() {
+  if (!userStore.isLoggedIn) {
+    appointmentList.value = []
+    return
+  }
+  appointmentLoading.value = true
+  try {
+    const data = await appointmentApi.getList({ pageSize: 50 }) as any
+    const list = data?.list || (Array.isArray(data) ? data : [])
+    appointmentList.value = list
+  } catch {
+    appointmentList.value = []
+  } finally {
+    appointmentLoading.value = false
+  }
+}
+
+function cancelAppointment(item: any) {
+  uni.showModal({
+    title: '确认取消',
+    content: `确定取消预约「${item.service_name || ''}」吗？`,
+    success: async (res) => {
+      if (!res.confirm) return
+      try {
+        const id = item.appointment_id || item._id
+        await appointmentApi.cancel(id)
+        uni.showToast({ title: '已取消', icon: 'success' })
+        await loadAppointments()
+      } catch (err: any) {
+        uni.showToast({ title: err?.message || '取消失败', icon: 'none' })
+      }
+    },
+  })
+}
+
+function rebook(item: any) {
+  const merchantId = item?.merchant_id || userStore.userInfo.merchant_id || merchantStore.merchantInfo.merchant_id
+  if (!merchantId) {
+    uni.showToast({ title: '缺少门店信息', icon: 'none' })
+    return
+  }
+  const serviceId = item?.service_id || ''
+  merchantStore.setMerchant({ merchant_id: merchantId })
+  const query = serviceId
+    ? `merchant_id=${merchantId}&service_id=${serviceId}`
+    : `merchant_id=${merchantId}`
+  uni.navigateTo({ url: `/pages/index/index?${query}` })
 }
 
 // 手机号脱敏
@@ -296,13 +452,6 @@ function onLogout() {
   })
 }
 
-function onMockToggle(event: any) {
-  const enabled = !!event.detail.value
-  setMockEnabled(enabled)
-  syncApiEnv()
-  uni.showToast({ title: enabled ? '已切换为 Mock' : '已切换为真实接口', icon: 'none' })
-}
-
 function editBaseUrl() {
   uni.showModal({
     title: '设置接口地址',
@@ -320,15 +469,10 @@ function editBaseUrl() {
   })
 }
 
-function resetMockData() {
-  resetMockDb()
-  merchantStore.clearMerchant()
-  uni.showToast({ title: 'Mock 数据已重置', icon: 'success' })
-}
-
 onShow(() => {
   syncApiEnv()
   loadProfile()
+  loadAppointments()
 })
 </script>
 
@@ -452,6 +596,194 @@ onShow(() => {
 .stat-divider {
   width: 1rpx;
   background: #F0F0F0;
+}
+
+/* 我的预约 */
+.appointments-card {
+  margin: 0 30rpx 20rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  padding: 24rpx;
+}
+
+.appointments-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18rpx;
+}
+
+.appointments-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+
+.appointments-tabs {
+  display: inline-flex;
+  background: #F5F5F7;
+  border-radius: 999rpx;
+  padding: 4rpx;
+}
+
+.appointments-tab {
+  min-width: 92rpx;
+  height: 46rpx;
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22rpx;
+  color: #666;
+}
+
+.appointments-tab-on {
+  background: #FFFFFF;
+  color: #1A1A1A;
+  font-weight: 600;
+}
+
+.appointments-status {
+  font-size: 24rpx;
+  color: #999;
+  padding: 22rpx 0;
+}
+
+.appointment-item {
+  border-top: 1rpx solid #F2F2F2;
+  padding: 18rpx 0;
+}
+
+.appointment-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8rpx;
+}
+
+.appointment-name {
+  font-size: 27rpx;
+  font-weight: 600;
+  color: #1A1A1A;
+}
+
+.appointment-status {
+  font-size: 22rpx;
+  color: #666;
+}
+
+.appointment-time {
+  display: block;
+  font-size: 24rpx;
+  color: #666;
+  margin-bottom: 4rpx;
+}
+
+.appointment-id {
+  display: block;
+  font-size: 22rpx;
+  color: #999;
+}
+
+.appointment-detail {
+  margin-top: 12rpx;
+  background: #F7F8FA;
+  border-radius: 14rpx;
+  padding: 14rpx 16rpx;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6rpx;
+}
+
+.detail-label {
+  font-size: 23rpx;
+  color: #999;
+}
+
+.detail-value {
+  font-size: 23rpx;
+  color: #444;
+  margin-left: 12rpx;
+}
+
+.timeline-list {
+  margin-top: 10rpx;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  margin-bottom: 8rpx;
+}
+
+.timeline-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+.timeline-dot-busy {
+  background: #34C759;
+}
+
+.timeline-name {
+  flex: 1;
+  font-size: 22rpx;
+  color: #333;
+}
+
+.timeline-time {
+  font-size: 22rpx;
+  color: #888;
+}
+
+.appointment-expand-hint {
+  margin-top: 8rpx;
+}
+
+.appointment-expand-text {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.appointment-actions {
+  margin-top: 12rpx;
+}
+
+.btn-cancel-appointment {
+  display: inline-flex;
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0 22rpx;
+  border-radius: 14rpx;
+  background: #FFF2F2;
+  color: #D93026;
+  font-size: 24rpx;
+}
+
+.btn-cancel-appointment::after {
+  border: none;
+}
+
+.btn-rebook {
+  display: inline-flex;
+  height: 56rpx;
+  line-height: 56rpx;
+  padding: 0 22rpx;
+  border-radius: 14rpx;
+  background: #EAF7EE;
+  color: #149647;
+  font-size: 24rpx;
+  margin-right: 10rpx;
+}
+
+.btn-rebook::after {
+  border: none;
 }
 
 /* 菜单 */

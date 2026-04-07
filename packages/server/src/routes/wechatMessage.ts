@@ -1,5 +1,5 @@
 import Router from 'koa-router'
-import { verifyWechatServer, receiveWechatMessage } from '../controllers/wechatMessage'
+import { verifyWechatServer, receiveWechatMessage } from '../controllers/wechatMessage.js'
 
 const router = new Router({ prefix: '/api/wechat' })
 
