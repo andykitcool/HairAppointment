@@ -17,6 +17,14 @@ import platformRoutes from './platform.js'
 export function registerRoutes(app: any) {
   const apiRouter = new Router()
 
+  apiRouter.get('/health', (ctx: any) => {
+    ctx.body = {
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: Math.round(process.uptime()),
+    }
+  })
+
   // 注册各业务路由
   apiRouter.use(authRoutes.routes(), authRoutes.allowedMethods())
   apiRouter.use(appointmentRoutes.routes(), appointmentRoutes.allowedMethods())
@@ -38,11 +46,4 @@ export function registerRoutes(app: any) {
   // 微信消息接收（单独注册，不需要认证）
   app.use(wechatMessageRoutes.routes())
   app.use(wechatMessageRoutes.allowedMethods())
-
-  // 健康检查
-  app.use(async (ctx: any) => {
-    if (ctx.url === '/health') {
-      ctx.body = { status: 'ok', timestamp: new Date().toISOString() }
-    }
-  })
 }
