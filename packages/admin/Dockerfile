@@ -9,7 +9,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json .
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/admin/package.json ./packages/admin/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --no-frozen-lockfile
 
 # Force rebuild - cache buster v2
 RUN echo "Cache bust v2: $(date)"

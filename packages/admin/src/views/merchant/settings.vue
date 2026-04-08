@@ -231,10 +231,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed, nextTick } from 'vue'
-import { merchantApi } from '@/api/request'
+import { adminApi, merchantApi } from '@/api/request'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { Plus, Check } from '@element-plus/icons-vue'
+
+const FILE_BASE_URL = String(import.meta.env.VITE_PUBLIC_FILE_BASE_URL || '')
+  .trim()
+  .replace(/\/$/, '')
 
 const authStore = useAuthStore()
 const loading = ref(false)
@@ -303,7 +307,13 @@ const uploadRef = ref<any>(null)
 const uploadAvatarRef = ref<any>(null)
 
 // 高德地图选点
-const AMAP_KEY = (import.meta as any).env?.VITE_AMAP_KEY || ''
+const amapConfig = reactive({
+  enabled: false,
+  js_api_key: '',
+  security_js_code: '',
+  service_host: '',
+  web_service_key: '',
+})
 const mapDialogVisible = ref(false)
 const mapLoading = ref(false)
 const mapInitError = ref('')
@@ -315,6 +325,10 @@ let amapGeocoder: any = null
 let amapScriptPromise: Promise<void> | null = null
 
 function openMapPicker() {
+  if (!amapConfig.enabled || !amapConfig.js_api_key) {
+    ElMessage.warning('尚未配置高德地图参数，请先联系超管在系统设置中完成配置')
+    return
+  }
   mapDialogVisible.value = true
 }
 
@@ -325,12 +339,18 @@ function loadAmapScript() {
   if (amapScriptPromise) return amapScriptPromise
 
   amapScriptPromise = new Promise<void>((resolve, reject) => {
-    if (!AMAP_KEY) {
-      reject(new Error('未配置高德地图 Key，请在 admin 环境变量中设置 VITE_AMAP_KEY'))
+    if (!amapConfig.enabled || !amapConfig.js_api_key) {
+      reject(new Error('未配置高德地图 Key，请先在超管系统设置中完成高德配置'))
       return
     }
+    if (amapConfig.security_js_code || amapConfig.service_host) {
+      ;(window as any)._AMapSecurityConfig = {
+        ...(amapConfig.security_js_code ? { securityJsCode: amapConfig.security_js_code } : {}),
+        ...(amapConfig.service_host ? { serviceHost: amapConfig.service_host } : {}),
+      }
+    }
     const script = document.createElement('script')
-    script.src = `https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&plugin=AMap.Geocoder`
+    script.src = `https://webapi.amap.com/maps?v=2.0&key=${amapConfig.js_api_key}&plugin=AMap.Geocoder`
     script.async = true
     script.onload = () => resolve()
     script.onerror = () => reject(new Error('高德地图脚本加载失败'))
@@ -362,6 +382,18 @@ function reverseGeocode(lng: number, lat: number) {
       form.address = result.regeocode.formattedAddress
     }
   })
+}
+
+function refreshMapViewport(center: [number, number]) {
+  if (!amapInstance) return
+  // 弹窗动画期间容器尺寸会变化，延迟触发 resize 可避免底图瓦片空白。
+  const doResize = () => {
+    if (!amapInstance) return
+    amapInstance.resize()
+    amapInstance.setZoomAndCenter(13, center)
+  }
+  setTimeout(doResize, 0)
+  setTimeout(doResize, 160)
 }
 
 async function initMapPicker() {
@@ -396,6 +428,7 @@ async function initMapPicker() {
     }
 
     setMapMarker(initLng, initLat)
+    refreshMapViewport([initLng, initLat])
   } catch (err: any) {
     mapInitError.value = err?.message || '地图初始化失败'
   } finally {
@@ -420,6 +453,37 @@ const uploadHeaders = computed(() => {
     Authorization: token ? `Bearer ${token}` : '',
   }
 })
+
+function getPublicFileBaseUrl() {
+  if (FILE_BASE_URL) return FILE_BASE_URL
+  const protocol = window.location.protocol || 'http:'
+  const host = window.location.hostname || 'localhost'
+  return `${protocol}//${host}:3100`
+}
+
+function buildPublicImageUrl(url: string) {
+  if (!url) return ''
+  if (/^https?:\/\//.test(url)) return url
+  const baseUrl = getPublicFileBaseUrl()
+  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`
+}
+
+function stripPublicImageUrl(url: string) {
+  if (!url) return ''
+  if (!/^https?:\/\//.test(url)) return url
+
+  const baseUrl = getPublicFileBaseUrl()
+  if (url.startsWith(baseUrl)) {
+    return url.replace(baseUrl, '')
+  }
+
+  const currentOrigin = `${window.location.protocol}//${window.location.host}`
+  if (url.startsWith(currentOrigin)) {
+    return url.replace(currentOrigin, '')
+  }
+
+  return url
+}
 
 // 触发上传
 function triggerUpload() {
@@ -448,12 +512,7 @@ function beforeUpload(file: File) {
 // 上传成功
 function handleUploadSuccess(response: any) {
   if (response.code === 0) {
-    // 构建完整的图片URL（使用后端API地址）
-    const baseUrl = 'http://localhost:3100'
-    const imageUrl = response.data.url.startsWith('http') 
-      ? response.data.url 
-      : `${baseUrl}${response.data.url}`
-    displayForm.hero_image = imageUrl
+    displayForm.hero_image = buildPublicImageUrl(response.data.url)
     ElMessage.success('图片上传成功，请记得点击"保存展示设置"按钮保存')
   } else {
     ElMessage.error(response.message || '上传失败')
@@ -462,11 +521,7 @@ function handleUploadSuccess(response: any) {
 
 function handleAvatarUploadSuccess(response: any) {
   if (response.code === 0) {
-    const baseUrl = 'http://localhost:3100'
-    const imageUrl = response.data.url.startsWith('http')
-      ? response.data.url
-      : `${baseUrl}${response.data.url}`
-    displayForm.owner_avatar = imageUrl
+    displayForm.owner_avatar = buildPublicImageUrl(response.data.url)
     ElMessage.success('头像上传成功，请记得点击"保存"按钮保存')
   } else {
     ElMessage.error(response.message || '上传失败')
@@ -498,6 +553,20 @@ function handleImageError() {
 function handleAvatarImageError() {
   console.error('[Settings] Avatar failed to load:', displayForm.owner_avatar)
   ElMessage.error('头像加载失败，URL: ' + displayForm.owner_avatar)
+}
+
+async function loadAmapConfig() {
+  try {
+    const res = await adminApi.getAmapConfig() as any
+    const data = res?.data || res || {}
+    amapConfig.enabled = !!data.enabled
+    amapConfig.js_api_key = data.js_api_key || ''
+    amapConfig.security_js_code = data.security_js_code || ''
+    amapConfig.service_host = data.service_host || ''
+    amapConfig.web_service_key = data.web_service_key || ''
+  } catch (e) {
+    console.error('[Settings] Load amap config failed', e)
+  }
 }
 
 async function loadData() {
@@ -559,20 +628,8 @@ async function loadData() {
     if (displayRes?.code === 0 && displayRes.data) {
       const ds = displayRes.data.display_settings || {}
       console.log('[Settings] Display settings loaded:', ds)
-      // 处理图片URL：确保使用正确的后端地址
-      const baseUrl = 'http://localhost:3100'
-      let heroImage = ds.hero_image || ''
-      let ownerAvatar = ds.owner_avatar || ''
-      if (heroImage && !heroImage.startsWith('http')) {
-        // 相对路径，添加后端地址前缀
-        heroImage = `${baseUrl}${heroImage}`
-      }
-      if (ownerAvatar && !ownerAvatar.startsWith('http')) {
-        ownerAvatar = `${baseUrl}${ownerAvatar}`
-      }
-      // 使用 nextTick 确保 DOM 更新后再设置新值
-      displayForm.hero_image = heroImage
-      displayForm.owner_avatar = ownerAvatar
+      displayForm.hero_image = buildPublicImageUrl(ds.hero_image || '')
+      displayForm.owner_avatar = buildPublicImageUrl(ds.owner_avatar || '')
       displayForm.owner_title = ds.owner_title || '店长'
       displayForm.theme_color = ds.theme_color || '#1890ff'
       displayForm.welcome_text = ds.welcome_text || '欢迎预约，我们将为您提供专业服务'
@@ -636,32 +693,10 @@ async function saveDisplaySettings() {
 
   savingDisplay.value = true
   try {
-    // 保存时提取相对路径（去掉任何域名部分）
-    const baseUrl = 'http://localhost:3100'
-    let heroImage = displayForm.hero_image
-    let ownerAvatar = displayForm.owner_avatar
-    let relativePath = heroImage
-    let ownerAvatarRelativePath = ownerAvatar
-    // 去掉后端地址前缀
-    if (heroImage && heroImage.startsWith(baseUrl)) {
-      relativePath = heroImage.replace(baseUrl, '')
-    }
-    // 去掉前端地址前缀（旧数据兼容）
-    else if (heroImage && heroImage.startsWith('http://localhost:9080')) {
-      relativePath = heroImage.replace('http://localhost:9080', '')
-    }
-
-    if (ownerAvatar && ownerAvatar.startsWith(baseUrl)) {
-      ownerAvatarRelativePath = ownerAvatar.replace(baseUrl, '')
-    }
-    else if (ownerAvatar && ownerAvatar.startsWith('http://localhost:9080')) {
-      ownerAvatarRelativePath = ownerAvatar.replace('http://localhost:9080', '')
-    }
-
     await merchantApi.updateDisplaySettings(merchantId, {
       ...displayForm,
-      hero_image: relativePath,
-      owner_avatar: ownerAvatarRelativePath,
+      hero_image: stripPublicImageUrl(displayForm.hero_image),
+      owner_avatar: stripPublicImageUrl(displayForm.owner_avatar),
     })
     ElMessage.success('展示设置保存成功')
   } catch (e: any) {
@@ -674,6 +709,7 @@ async function saveDisplaySettings() {
 onMounted(() => {
   console.log('[Settings] onMounted called')
   console.log('[Settings] authStore.user in onMounted:', JSON.stringify(authStore.user))
+  loadAmapConfig()
   loadData()
 })
 </script>

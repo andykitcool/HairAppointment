@@ -74,6 +74,10 @@
         {
           "path": "apply",
           "style": { "navigationBarTitleText": "申请成为店长" }
+        },
+        {
+          "path": "manage",
+          "style": { "navigationBarTitleText": "管理门店" }
         }
       ]
     }

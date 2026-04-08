@@ -36,7 +36,7 @@
         @tap="previewImage"
       />
       <view class="result-tip">
-        <text>图片仅供参考，有效期 24 小时</text>
+        <text>图片仅供参考，已为你持久保存</text>
       </view>
       <view class="action-row">
         <view class="action-btn" @tap="saveImage">保存图片</view>

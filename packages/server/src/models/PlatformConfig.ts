@@ -9,6 +9,13 @@ export interface IPlatformConfigDocument extends Document {
     prompt: string
     size: string
   }
+  amap_config: {
+    enabled: boolean
+    js_api_key: string
+    security_js_code: string
+    service_host: string
+    web_service_key: string
+  }
   email_config: {
     enabled: boolean
     host: string
@@ -31,6 +38,13 @@ const PlatformConfigSchema = new Schema<IPlatformConfigDocument>({
     model: { type: String, default: 'doubao-seedream-5-0-260128' },
     prompt: { type: String, default: '' },
     size: { type: String, default: '2K' },
+  },
+  amap_config: {
+    enabled: { type: Boolean, default: false },
+    js_api_key: { type: String, default: '' },
+    security_js_code: { type: String, default: '' },
+    service_host: { type: String, default: '' },
+    web_service_key: { type: String, default: '' },
   },
   email_config: {
     enabled: { type: Boolean, default: false },

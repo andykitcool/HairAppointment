@@ -39,6 +39,7 @@
             </template>
             <el-menu-item index="/settings/profile">个人设置</el-menu-item>
             <el-menu-item index="/settings/wechat">微信配置</el-menu-item>
+            <el-menu-item index="/settings/amap">高德配置</el-menu-item>
             <el-menu-item index="/settings/system-email">系统邮件配置</el-menu-item>
           </el-sub-menu>
         </template>

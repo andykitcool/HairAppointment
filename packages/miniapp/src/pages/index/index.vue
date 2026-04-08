@@ -145,6 +145,32 @@
     </view>
   </view>
 
+  <view v-if="showPhoneAuthSheet" class="sheet-wrap">
+    <view class="sheet-mask" @tap="showPhoneAuthSheet = false"></view>
+    <view class="sheet-panel phone-auth-sheet">
+      <view class="sheet-head">
+        <text class="sheet-title">请先授权手机号</text>
+        <view class="sheet-x" @tap="showPhoneAuthSheet = false">
+          <text class="sheet-x-text">✕</text>
+        </view>
+      </view>
+      <view class="sheet-body">
+        <text class="phone-auth-desc">用于预约联系与门店通知，授权后会自动带入预约信息。</text>
+      </view>
+      <view class="sheet-foot phone-auth-foot">
+        <view class="phone-auth-cancel" @tap="showPhoneAuthSheet = false">暂不授权</view>
+        <button
+          class="phone-auth-btn"
+          open-type="getPhoneNumber"
+          @tap.stop="noop"
+          @getphonenumber="onGetPhoneNumber"
+        >
+          微信授权手机号
+        </button>
+      </view>
+    </view>
+  </view>
+
   <!-- ── 联系人弹层 ── -->
   <view v-if="showSheet" class="sheet-wrap">
     <view class="sheet-mask" @tap="showSheet = false"></view>
@@ -334,9 +360,12 @@ const displaySettings = ref({
 })
 
 const merchantInfo = ref<any>({
-  merchant_id: '', name: '黑白造型工作室',
-  address: '星光大道 88号2楼', phone: '',
-  business_hours: { start: '09:00', end: '18:00' }, status: 'active',
+  merchant_id: '',
+  name: '',
+  address: '',
+  phone: '',
+  business_hours: {},
+  status: 'active',
 })
 
 const apiServices = ref<any[]>([])
@@ -368,6 +397,7 @@ const slotsClosed = ref(false)
 
 // 联系人弹层
 const showSheet = ref(false)
+const showPhoneAuthSheet = ref(false)
 const contactName = ref('')
 const contactPhone = ref('')
 const submitting = ref(false)
@@ -424,7 +454,10 @@ const groupedSlots = computed(() => {
 const todayBusinessLabel = computed(() => {
   const intervals = getBusinessIntervals(new Date(), merchantInfo.value.business_hours)
   if (!intervals.length) return '今日休息'
-  return intervals.map((it) => `${it.start}-${it.end}`).join(' / ')
+  const sorted = [...intervals].sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start))
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  return `${first.start}-${last.end}`
 })
 
 // ── 工具函数 ──
@@ -640,6 +673,17 @@ watch(selectedDate, (val) => {
 function onBook() {
   if (!canBook.value) return
 
+  if (!userStore.userInfo.phone) {
+    showPhoneAuthSheet.value = true
+    return
+  }
+
+  continueBooking()
+}
+
+function continueBooking() {
+  showPhoneAuthSheet.value = false
+
   const storedName = userStore.userInfo.realName || userStore.userInfo.nickname || ''
   const storedPhone = userStore.userInfo.phone || ''
   const storedAvatar = userStore.userInfo.avatarUrl || userStore.userInfo.avatar_url || ''
@@ -654,6 +698,50 @@ function onBook() {
     contactName.value = storedName
     contactPhone.value = storedPhone
     showSheet.value = true
+  }
+}
+
+function noop() {
+  // no-op: 用于阻止弹层按钮点击冒泡
+}
+
+async function onGetPhoneNumber(event: any) {
+  const detail = event?.detail || {}
+  const errMsg = String(detail?.errMsg || '')
+  const code = String(detail?.code || '')
+
+  if (errMsg.includes('deny') || errMsg.includes('cancel')) {
+    uni.showToast({ title: '你已取消授权', icon: 'none' })
+    return
+  }
+
+  if (!code) {
+    uni.showToast({ title: '未获取到授权码，请重试', icon: 'none' })
+    return
+  }
+
+  try {
+    const ok = await ensureLogin()
+    if (!ok) {
+      uni.showToast({ title: '登录失败，请重试', icon: 'none' })
+      return
+    }
+
+    uni.showLoading({ title: '获取中...', mask: true })
+    const data = await authApi.getPhone(code) as any
+    const phone = String(data?.phone || '')
+    if (!phone) {
+      uni.showToast({ title: '获取手机号失败', icon: 'none' })
+      return
+    }
+    userStore.setUser({ ...userStore.userInfo, phone })
+    contactPhone.value = phone
+    uni.showToast({ title: '手机号授权成功', icon: 'success' })
+    continueBooking()
+  } catch (err: any) {
+    uni.showToast({ title: err?.message || '手机号授权失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
   }
 }
 
@@ -713,22 +801,14 @@ async function ensureLogin() {
 }
 
 async function loadMerchant(): Promise<string> {
-  if (incomingMerchantId.value) {
-    try {
-      const data = await merchantApi.getInfo(incomingMerchantId.value) as any
-      merchantInfo.value = data
-      merchantStore.setMerchant(data)
-      return data.merchant_id
-    } catch {
-      // ignore and fallback
-    }
+  const cached = merchantStore.merchantInfo || {}
+  const mid = incomingMerchantId.value || cached.merchant_id || userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
+
+  if (cached.merchant_id) {
+    // 先显示缓存，随后继续请求最新门店信息覆盖，避免旧地址长期停留。
+    merchantInfo.value = { ...cached }
   }
 
-  if (merchantStore.merchantInfo.merchant_id) {
-    merchantInfo.value = { ...merchantStore.merchantInfo }
-    return merchantStore.merchantInfo.merchant_id
-  }
-  const mid = userStore.userInfo.merchant_id || DEFAULT_MERCHANT_ID
   try {
     const data = await merchantApi.getInfo(mid) as any
     merchantInfo.value = data
@@ -736,14 +816,14 @@ async function loadMerchant(): Promise<string> {
     return data.merchant_id
   } catch {
     merchantInfo.value = {
-      merchant_id: DEFAULT_MERCHANT_ID,
-      name: '黑白造型工作室',
-      address: '星光大道 88号2楼',
-      phone: '13800000000',
-      business_hours: { start: '09:00', end: '18:00' },
+      merchant_id: cached.merchant_id || DEFAULT_MERCHANT_ID,
+      name: cached.name || '',
+      address: cached.address || '',
+      phone: cached.phone || '',
+      business_hours: cached.business_hours || {},
       status: 'active',
     }
-    return DEFAULT_MERCHANT_ID
+    return merchantInfo.value.merchant_id
   }
 }
 
@@ -1679,6 +1759,51 @@ async function onSelectMerchant(m: any) {
 
 .sheet-foot {
   margin-top: 8rpx;
+}
+
+.phone-auth-sheet .sheet-body {
+  margin-bottom: 20rpx;
+}
+
+.phone-auth-desc {
+  display: block;
+  font-size: 25rpx;
+  color: #5c646f;
+  line-height: 1.65;
+}
+
+.phone-auth-foot {
+  display: flex;
+  gap: 16rpx;
+}
+
+.phone-auth-cancel {
+  flex: 1;
+  height: 96rpx;
+  border-radius: 24rpx;
+  background: #f0f2f5;
+  color: #5d6876;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.phone-auth-btn {
+  flex: 1;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 24rpx;
+  border: 0;
+  background: #07c160;
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.phone-auth-btn::after {
+  border: none;
 }
 
 .btn-confirm {

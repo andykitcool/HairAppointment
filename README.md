@@ -78,19 +78,57 @@ pnpm dev:admin
 ### 构建
 
 ```bash
-# 构建所有包
-pnpm build:server && pnpm build:shared && pnpm build:admin
+# 构建共享包、后端和后台
+pnpm build:shared && pnpm build:server && pnpm build:admin
 
 # 构建小程序
 pnpm build:miniapp
 ```
 
-## Docker 部署
+## 生产/预发部署
 
-项目根目录提供了 `docker-compose.yml`，一键启动所有服务：
+建议先用预发域名做联调，再进入正式环境。当前仓库已经具备生产环境进一步测试的基础条件，但仍有少量已知限制，见文末“已知风险”。
+
+### 1. 准备环境变量
+
+根目录容器环境：
 
 ```bash
-docker-compose up -d
+Copy-Item .env.deploy .env
+```
+
+然后按实际环境修改 `.env`，至少包括：
+
+- `JWT_SECRET`：替换为高强度随机串
+- `WX_APPID` / `WX_APPSECRET`：替换为真实小程序配置
+- 如使用外部数据库或 Redis，改成实际连接地址
+
+管理后台静态资源访问地址：参考 `packages/admin/.env.example`
+
+- `VITE_PUBLIC_FILE_BASE_URL` 应指向可被浏览器访问的 API 域名，例如 `https://api.example.com` 或统一入口域名
+
+小程序接口地址：参考 `packages/miniapp/.env.example`
+
+- `VITE_API_BASE_URL` 必须指向线上 API，例如 `https://api.example.com/api`
+- 生产构建下如果未配置该值，小程序会直接报“接口地址未配置”
+
+### 2. 构建与启动
+
+先做本地构建校验：
+
+```bash
+pnpm lint
+pnpm build:shared
+pnpm build:server
+pnpm build:admin
+pnpm build:miniapp
+```
+
+再构建生产镜像并启动：
+
+```bash
+docker compose -f docker-compose.yml build api admin
+docker compose -f docker-compose.yml up -d
 ```
 
 包含以下服务：
@@ -102,7 +140,24 @@ docker-compose up -d
 | api | hair-api | 3000 | 后端 API 服务 |
 | admin | hair-admin | 8080 | Web 管理后台（Nginx 静态服务） |
 
-> 启动前需要在项目根目录创建 `.env` 文件配置环境变量。
+实际宿主机暴露端口见 `docker-compose.yml`：
+
+- API：`3100`
+- Admin：`9080`
+- MongoDB：`27018`
+- Redis：`6380`
+
+### 3. 启动后验证
+
+- 访问 API 健康检查：`http://<host>:3100/health`
+- 打开管理后台：`http://<host>:9080`
+- 确认上传文件在重启容器后仍可访问，当前已挂载 `uploads-data` 持久卷
+
+### 4. 小程序发布前要求
+
+- 在构建前注入 `VITE_API_BASE_URL`
+- 确认微信后台业务域名、服务器域名已配置为实际线上域名
+- 生产包中已隐藏“开发环境/修改地址”入口，不应再依赖手工改接口地址调试
 
 ## 可用脚本
 
@@ -144,7 +199,7 @@ HairAppointment/
 
 ## 环境变量
 
-在项目根目录创建 `.env` 文件：
+根目录环境变量可参考 `.env.example` 或 `.env.deploy`：
 
 ```env
 # 服务器端口
@@ -167,6 +222,13 @@ WX_SECRET=your_secret
 # COZE（可选，每店在 Web 后台独立配置）
 COZE_API_ENDPOINT=https://api.coze.cn/v1
 ```
+
+## 已知风险
+
+- 当前 `pnpm-lock.yaml` 与部分 `package.json` 仍有漂移；Dockerfile 现使用 `pnpm install --no-frozen-lockfile` 作为临时兜底，适合继续测试，不适合作为最终可复现发布基线。
+- 本机 `pnpm install --lockfile-only` 在当前环境会触发 `ERR_INVALID_THIS` 拉取元数据失败，因此 lockfile 需要在网络与 pnpm 环境正常的机器上回正后再提交。
+- `pnpm lint` 目前只覆盖 `packages/*/src/**/*.ts`，尚未覆盖 `.vue` 单文件组件。
+- 飞书同步、短信/通知等模块仍存在 TODO 占位逻辑，适合功能受控测试，不建议在公开环境默认开启相关承诺能力。
 
 ## 开发规范
 

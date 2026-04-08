@@ -8,7 +8,8 @@ const router = new Router({ prefix: '/api/auth' })
 router.post('/wechat-login', authController.wechatLogin)
 router.post('/phone', authController.getPhone)
 router.post('/admin-login', authController.adminLogin)
-router.post('/apply-owner', authController.applyOwner)
+router.post('/apply-owner', authMiddleware, authController.applyOwner)
+router.get('/owner-application', authMiddleware, authController.getOwnerApplication)
 
 // 微信扫码登录相关（公开接口）
 router.get('/wechat-login-qr', authController.getWechatLoginQR)

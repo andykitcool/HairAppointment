@@ -12,7 +12,7 @@
     "build:miniapp": "pnpm --filter @hair/miniapp build:mp-weixin",
     "build:admin": "pnpm --filter @hair/admin build",
     "build:shared": "pnpm --filter @hair/shared build",
-    "lint": "eslint packages/*/src --ext .ts,.vue",
+    "lint": "eslint \"packages/*/src/**/*.ts\"",
     "clean": "rimraf packages/*/dist"
   },
   "devDependencies": {
@@ -27,7 +27,7 @@
     "@koa/router": "^15.4.0",
     "@noble/hashes": "^2.0.1",
     "@paralleldrive/cuid2": "^3.3.0",
-    "axios": "^1.14.0",
+    "axios": "^1.15.0",
     "bcryptjs": "^3.0.3",
     "dayjs": "^1.11.20",
     "dotenv": "^17.4.1",

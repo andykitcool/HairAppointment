@@ -30,6 +30,10 @@ router.delete('/ads/:id', sessionAuthMiddleware, adminController.deletePlatformA
 router.get('/platform-coze', sessionAuthMiddleware, adminController.getPlatformCozeConfig)
 router.put('/platform-coze', sessionAuthMiddleware, adminController.updatePlatformCozeConfig)
 
+// 高德开放平台配置
+router.get('/amap-config', sessionAuthMiddleware, adminController.getAmapConfig)
+router.put('/amap-config', sessionAuthMiddleware, adminController.updateAmapConfig)
+
 // 系统邮件配置
 router.get('/system-email', sessionAuthMiddleware, adminController.getSystemEmailConfig)
 router.put('/system-email', sessionAuthMiddleware, adminController.updateSystemEmailConfig)

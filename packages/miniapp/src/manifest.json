@@ -7,6 +7,11 @@
   "transformPx": false,
   "mp-weixin": {
     "appid": "wx4d0203d286666af6",
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于展示附近门店并提供就近预约服务"
+      }
+    },
     "setting": {
       "urlCheck": false,
       "es6": true,

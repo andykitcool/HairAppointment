@@ -1,17 +1,37 @@
-const DEFAULT_BASE_URL = 'http://127.0.0.1:3100/api'
+const DEV_BASE_URL = 'http://127.0.0.1:3100/api'
+const PROD_BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/$/, '')
+const DEFAULT_BASE_URL = import.meta.env.DEV ? DEV_BASE_URL : PROD_BASE_URL
+
+function isWechatDevtools(): boolean {
+  try {
+    const sys = uni.getSystemInfoSync()
+    return sys?.platform === 'devtools'
+  } catch {
+    return false
+  }
+}
 
 function getToken(): string {
   return uni.getStorageSync('token') || ''
 }
 
-function getBaseUrl(): string {
-  const saved = String(uni.getStorageSync('api_base_url') || '').trim()
-  if (!saved) return DEFAULT_BASE_URL
+function normalizeBaseUrl(baseUrl: string): string {
+  return String(baseUrl || '').trim().replace(/\/$/, '')
+}
 
-  // 兼容旧版本遗留的线上地址，开发环境默认回到本地 API
-  if (saved.includes('wechat.vidiu.cn')) {
-    uni.setStorageSync('api_base_url', DEFAULT_BASE_URL)
-    return DEFAULT_BASE_URL
+function getFallbackBaseUrl(): string {
+  if (DEFAULT_BASE_URL) return DEFAULT_BASE_URL
+  return isWechatDevtools() ? DEV_BASE_URL : ''
+}
+
+function getBaseUrl(): string {
+  const saved = normalizeBaseUrl(String(uni.getStorageSync('api_base_url') || ''))
+  if (!saved) return getFallbackBaseUrl()
+
+  // 微信开发者工具中固定走本地 API，避免误用历史远端地址造成调试结果不一致
+  if (isWechatDevtools() && !/localhost|127\.0\.0\.1/.test(saved)) {
+    uni.setStorageSync('api_base_url', DEV_BASE_URL)
+    return DEV_BASE_URL
   }
 
   return saved
@@ -30,6 +50,7 @@ export function getApiEnv() {
   return {
     baseUrl: getBaseUrl(),
     defaultBaseUrl: DEFAULT_BASE_URL,
+    isProd: !import.meta.env.DEV,
   }
 }
 
@@ -42,6 +63,12 @@ interface RequestOptions {
 
 export function request<T = any>(options: RequestOptions): Promise<T> {
   return new Promise((resolve, reject) => {
+    const baseUrl = getBaseUrl()
+    if (!baseUrl) {
+      reject(new Error('接口地址未配置，请先设置生产环境 API 地址'))
+      return
+    }
+
     const header: Record<string, string> = {
       'Content-Type': 'application/json',
     }
@@ -52,7 +79,7 @@ export function request<T = any>(options: RequestOptions): Promise<T> {
     }
 
     uni.request({
-      url: `${getBaseUrl()}${options.url}`,
+      url: `${baseUrl}${options.url}`,
       method: options.method || 'GET',
       data: options.data,
       header,
@@ -105,6 +132,7 @@ export const authApi = {
   getProfile: () => request.get<any>('/auth/profile'),
   updateProfile: (data: any) => request.put<any>('/auth/profile', data),
   applyOwner: (data: any) => request.post<any>('/auth/apply-owner', data),
+  getOwnerApplication: () => request.get<any>('/auth/owner-application'),
   adminLogin: (data: any) => request.publicPost<any>('/auth/admin-login', data),
 }
 

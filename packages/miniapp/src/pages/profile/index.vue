@@ -105,17 +105,10 @@
     <!-- 菜单列表 -->
     <view class="menu-section">
       <view class="menu-group">
-        <view class="menu-item" @tap="navigateTo('/pages/owner/dashboard')" v-if="isOwner">
+        <view class="menu-item" @tap="navigateTo(isOwner ? '/pages/owner/manage' : '/pages/owner/apply')">
           <view class="menu-left">
-            <text class="menu-icon">📊</text>
-            <text class="menu-text">店务总览</text>
-          </view>
-          <text class="menu-arrow">›</text>
-        </view>
-        <view class="menu-item" v-if="!isOwner" @tap="navigateTo('/pages/owner/apply')">
-          <view class="menu-left">
-            <text class="menu-icon">🏪</text>
-            <text class="menu-text">申请成为店长</text>
+            <text class="menu-icon">{{ isOwner ? '🛠️' : '🏪' }}</text>
+            <text class="menu-text">{{ isOwner ? '管理门店' : '申请成为店长' }}</text>
           </view>
           <text class="menu-arrow">›</text>
         </view>
@@ -201,7 +194,7 @@
       <button class="btn-logout" @tap="onLogout">退出登录</button>
     </view>
 
-    <view class="dev-section">
+    <view class="dev-section" v-if="showDevSection">
       <view class="dev-card">
         <view class="dev-header">
           <text class="dev-title">开发环境</text>
@@ -235,6 +228,7 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const merchantStore = useMerchantStore()
+const showDevSection = import.meta.env.DEV
 
 const isLoggedIn = computed(() => userStore.isLoggedIn)
 const isOwner = computed(() => userStore.userInfo.role === 'owner')
@@ -387,22 +381,44 @@ async function autoLogin() {
 }
 
 // 点击头像
-function onTapAvatar() {
+async function onTapAvatar() {
   if (!isLoggedIn.value) {
-    autoLogin()
+    await autoLogin()
+  }
+
+  if (!isLoggedIn.value) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
     return
   }
-  // 更新头像/昵称
-  uni.chooseMedia({
-    count: 1,
-    mediaType: ['image'],
-    sizeType: ['compressed'],
-    success: async (res) => {
-      const tempFilePath = res.tempFiles[0]?.tempFilePath
-      if (tempFilePath) {
-        // 上传头像到服务器（后续实现上传功能）
-        uni.showToast({ title: '头像更新功能开发中', icon: 'none' })
+
+  uni.getUserProfile({
+    desc: '用于完善个人头像和昵称',
+    success: async (res: any) => {
+      const nickname = String(res?.userInfo?.nickName || '')
+      const avatarUrl = String(res?.userInfo?.avatarUrl || '')
+      if (!nickname && !avatarUrl) {
+        uni.showToast({ title: '未获取到资料', icon: 'none' })
+        return
       }
+
+      try {
+        await authApi.updateProfile({
+          nickname,
+          avatar_url: avatarUrl,
+        })
+        userStore.setUser({
+          ...userInfo.value,
+          nickname,
+          avatarUrl,
+          avatar_url: avatarUrl,
+        })
+        uni.showToast({ title: '资料已更新', icon: 'success' })
+      } catch (err: any) {
+        uni.showToast({ title: err?.message || '更新失败', icon: 'none' })
+      }
+    },
+    fail: () => {
+      uni.showToast({ title: '你已取消授权', icon: 'none' })
     },
   })
 }
@@ -453,6 +469,10 @@ function onLogout() {
 }
 
 function editBaseUrl() {
+  if (!showDevSection) {
+    return
+  }
+
   uni.showModal({
     title: '设置接口地址',
     editable: true,

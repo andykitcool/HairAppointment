@@ -6,6 +6,24 @@ import { generateAppointmentId as genAptId } from '../../../shared/dist/index.js
 
 const WEEK_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
+function getShanghaiNow() {
+  const formatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = formatter.formatToParts(new Date())
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value])) as Record<string, string>
+  return {
+    date: `${map.year}-${map.month}-${map.day}`,
+    minutes: Number(map.hour) * 60 + Number(map.minute),
+  }
+}
+
 async function resolveOwnerRealName(ownerId?: string, fallbackName?: string) {
   if (!ownerId) return fallbackName || '店长'
   const ownerAdmin = await AdminModel.findById(ownerId).lean()
@@ -108,7 +126,13 @@ export async function getAvailableSlots(ctx: Context) {
     }
 
     // 生成时间 slots（每 30 分钟一个）
-    const slots = finalIntervals.flatMap((itv) => generateTimeSlots(itv.start, itv.end, 30))
+    let slots = finalIntervals.flatMap((itv) => generateTimeSlots(itv.start, itv.end, 30))
+
+    // 当天已过时间直接不返回，前端既不显示也不可点击。
+    const shanghaiNow = getShanghaiNow()
+    if (date === shanghaiNow.date) {
+      slots = slots.filter((slot) => timeToMinutes(slot.start) > shanghaiNow.minutes)
+    }
 
     // 标记每个 slot 是否可用
     const availableSlots = slots.map((slot) => {
@@ -132,14 +156,6 @@ export async function getAvailableSlots(ctx: Context) {
             }
           }
           if (!available) break
-        }
-      }
-
-      // 检查是否已过当前时间
-      if (available && date === formatDate(new Date())) {
-        const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes()
-        if (timeToMinutes(slot.start) <= nowMinutes) {
-          available = false
         }
       }
 

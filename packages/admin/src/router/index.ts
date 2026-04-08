@@ -31,6 +31,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'settings/notify', name: 'NotifySettings', component: () => import('@/views/settings/notify.vue'), meta: { title: '通知配置' } },
       { path: 'settings/backup', name: 'BackupSettings', component: () => import('@/views/settings/backup.vue'), meta: { title: '数据备份' } },
       { path: 'settings/wechat', name: 'WechatSettings', component: () => import('@/views/settings/wechat.vue'), meta: { title: '微信配置', admin: true } },
+      { path: 'settings/amap', name: 'AmapSettings', component: () => import('@/views/settings/amap.vue'), meta: { title: '高德配置', admin: true } },
       { path: 'settings/system-email', name: 'SystemEmailSettings', component: () => import('@/views/settings/system-email.vue'), meta: { title: '系统邮件配置', admin: true } },
       // 超管专用
       { path: 'admin/merchants', name: 'AdminMerchants', component: () => import('@/views/admin/merchants.vue'), meta: { title: '门店管理', admin: true } },

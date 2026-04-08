@@ -362,6 +362,73 @@ export async function updatePlatformCozeConfig(ctx: Context) {
 }
 
 /**
+ * 获取高德开放平台配置
+ */
+export async function getAmapConfig(ctx: Context) {
+  let config = await PlatformConfigModel.findOne({ config_key: 'platform_default' })
+  if (!config) {
+    config = await PlatformConfigModel.create({ config_key: 'platform_default' })
+  }
+  if (!config) {
+    ctx.body = { code: 500, message: '平台配置初始化失败', data: null }
+    return
+  }
+
+  const saved = (config.amap_config || {}) as any
+  ctx.body = {
+    code: 0,
+    message: 'ok',
+    data: {
+      enabled: !!saved.enabled,
+      js_api_key: saved.js_api_key || '',
+      security_js_code: saved.security_js_code || '',
+      service_host: saved.service_host || '',
+      web_service_key: saved.web_service_key || '',
+    },
+  }
+}
+
+/**
+ * 更新高德开放平台配置
+ */
+export async function updateAmapConfig(ctx: Context) {
+  const body = (ctx.request.body || {}) as any
+  const enabled = !!body.enabled
+  const jsApiKey = String(body.js_api_key || '').trim()
+  const securityJsCode = String(body.security_js_code || '').trim()
+  const serviceHost = String(body.service_host || '').trim()
+  const webServiceKey = String(body.web_service_key || '').trim()
+
+  if (enabled && !jsApiKey) {
+    ctx.body = { code: 400, message: '启用高德时 Web JS API Key 不能为空', data: null }
+    return
+  }
+
+  await PlatformConfigModel.updateOne(
+    { config_key: 'platform_default' },
+    {
+      $set: {
+        amap_config: {
+          enabled,
+          js_api_key: jsApiKey,
+          security_js_code: securityJsCode,
+          service_host: serviceHost,
+          web_service_key: webServiceKey,
+        },
+        update_time: new Date(),
+      },
+      $setOnInsert: {
+        config_key: 'platform_default',
+        create_time: new Date(),
+      },
+    },
+    { upsert: true }
+  )
+
+  ctx.body = { code: 0, message: '保存成功', data: null }
+}
+
+/**
  * 获取系统邮件配置
  */
 export async function getSystemEmailConfig(ctx: Context) {
@@ -470,13 +537,13 @@ export async function getPlatformStats(ctx: Context) {
  * 获取入驻申请列表
  */
 export async function getApplications(ctx: Context) {
-  const { page = '1', pageSize = '20', status = 'applying' } = ctx.query as any
+  const { page = '1', pageSize = '20', status } = ctx.query as any
 
   const query: Record<string, any> = {}
-  if (status) {
-    query.status = status
-  } else {
+  if (status === 'applying') {
     query.status = { $in: ['applying', 'pending'] }
+  } else if (status && status !== 'all') {
+    query.status = status
   }
 
   const total = await MerchantModel.countDocuments(query)

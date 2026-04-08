@@ -1,4 +1,5 @@
 import { Context } from 'koa'
+import http from 'http'
 import https from 'https'
 import fs from 'fs'
 import path from 'path'
@@ -72,6 +73,108 @@ function buildUploadPublicUrl(ctx: Context, fileName: string) {
   const proto = String((ctx.headers['x-forwarded-proto'] as string) || ctx.protocol || 'http')
   const host = String(ctx.headers.host || 'localhost:3100')
   return `${proto}://${host}/uploads/${fileName}`
+}
+
+function isLocalUploadUrl(rawUrl: string) {
+  return String(rawUrl || '').includes('/uploads/')
+}
+
+function inferImageExtByContentType(contentType: string) {
+  const ct = String(contentType || '').toLowerCase()
+  if (ct.includes('png')) return '.png'
+  if (ct.includes('webp')) return '.webp'
+  if (ct.includes('jpeg') || ct.includes('jpg')) return '.jpg'
+  return '.jpg'
+}
+
+function inferImageExtByUrl(rawUrl: string) {
+  try {
+    const u = new URL(rawUrl)
+    const ext = path.extname(u.pathname || '').toLowerCase()
+    if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) return ext === '.jpeg' ? '.jpg' : ext
+    return '.jpg'
+  } catch {
+    return '.jpg'
+  }
+}
+
+async function requestBinaryWithRedirect(rawUrl: string, maxRedirects = 3): Promise<{ data: Buffer; contentType: string }> {
+  return new Promise((resolve, reject) => {
+    const doRequest = (url: string, redirectsLeft: number) => {
+      const urlObj = new URL(url)
+      const lib = urlObj.protocol === 'https:' ? https : http
+      const req = lib.request(
+        {
+          protocol: urlObj.protocol,
+          hostname: urlObj.hostname,
+          port: urlObj.port,
+          path: `${urlObj.pathname}${urlObj.search}`,
+          method: 'GET',
+          headers: {
+            'User-Agent': 'HairAppointment-AI-Image-Persist/1.0',
+          },
+        },
+        (res) => {
+          const status = Number(res.statusCode || 0)
+          const location = String(res.headers.location || '')
+          if ([301, 302, 303, 307, 308].includes(status) && location) {
+            if (redirectsLeft <= 0) {
+              reject(new Error('下载 AI 图片失败：重定向次数过多'))
+              return
+            }
+            const nextUrl = new URL(location, urlObj).toString()
+            res.resume()
+            doRequest(nextUrl, redirectsLeft - 1)
+            return
+          }
+          if (status < 200 || status >= 300) {
+            res.resume()
+            reject(new Error(`下载 AI 图片失败：HTTP ${status}`))
+            return
+          }
+
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+          })
+          res.on('end', () => {
+            resolve({
+              data: Buffer.concat(chunks),
+              contentType: String(res.headers['content-type'] || ''),
+            })
+          })
+        },
+      )
+
+      req.on('error', reject)
+      req.setTimeout(60000, () => {
+        req.destroy(new Error('下载 AI 图片超时'))
+      })
+      req.end()
+    }
+
+    doRequest(rawUrl, maxRedirects)
+  })
+}
+
+async function persistRemoteImageToLocal(ctx: Context, rawUrl: string) {
+  const payload = await requestBinaryWithRedirect(rawUrl)
+  if (!payload.data?.length) {
+    throw new Error('下载 AI 图片失败：内容为空')
+  }
+
+  const extByType = inferImageExtByContentType(payload.contentType)
+  const extByUrl = inferImageExtByUrl(rawUrl)
+  const safeExt = extByType || extByUrl || '.jpg'
+
+  const fileName = `ai_result_${Date.now()}_${Math.random().toString(36).slice(2, 8)}${safeExt}`
+  const uploadDir = path.join(process.cwd(), 'uploads')
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true })
+  }
+  fs.writeFileSync(path.join(uploadDir, fileName), payload.data)
+
+  return buildUploadPublicUrl(ctx, fileName)
 }
 
 async function requestArkImage(apiKey: string, payloadObj: any): Promise<string> {
@@ -314,12 +417,15 @@ export async function hairstyleRecommend(ctx: Context) {
           }
         }
 
+        // 统一转存到本地 uploads，避免外部签名链接过期导致历史结果无法访问
+        const persistedImageUrl = await persistRemoteImageToLocal(ctx, imageUrl)
+
         aiTaskStore.set(taskId, {
           ...initialTask,
           status: 'done',
           progress: 100,
           message: '推荐完成',
-          image_url: imageUrl,
+          image_url: persistedImageUrl,
           reason: '推荐理由：该发型更强调顶部层次与两侧线条平衡，能提升脸部轮廓立体感，同时保留日常打理的便利性。',
           updated_at: Date.now(),
         })
@@ -332,7 +438,7 @@ export async function hairstyleRecommend(ctx: Context) {
               status: 'done',
               progress: 100,
               message: '推荐完成',
-              image_url: imageUrl,
+              image_url: persistedImageUrl,
               error_message: '',
               update_time: new Date(),
             },
@@ -399,6 +505,25 @@ export async function getLatestHairstyleRecommend(ctx: Context) {
       return
     }
 
+    let outputImageUrl = String(latest.image_url || '')
+    if (outputImageUrl && !isLocalUploadUrl(outputImageUrl)) {
+      try {
+        const persistedImageUrl = await persistRemoteImageToLocal(ctx, outputImageUrl)
+        outputImageUrl = persistedImageUrl
+        await PlatformAiSnapshotModel.updateOne(
+          { _id: latest._id },
+          {
+            $set: {
+              image_url: persistedImageUrl,
+              update_time: new Date(),
+            },
+          },
+        )
+      } catch {
+        // 历史外链可能已过期，转存失败时保留原值，避免影响主流程
+      }
+    }
+
     ctx.body = {
       code: 0,
       message: 'ok',
@@ -408,7 +533,7 @@ export async function getLatestHairstyleRecommend(ctx: Context) {
         progress: latest.progress || 0,
         message: latest.message || '',
         input_image_url: latest.input_image_url || '',
-        image_url: latest.image_url || '',
+        image_url: outputImageUrl,
         error_message: latest.error_message || '',
       },
     }

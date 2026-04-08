@@ -33,6 +33,8 @@ services:
       - MONGODB_URI=mongodb://mongo:27017/hair_appointment
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+    volumes:
+      - uploads-data:/app/uploads
     ports:
       - "3100:3000"
     depends_on:
@@ -54,3 +56,4 @@ services:
 volumes:
   mongo-data:
   redis-data:
+  uploads-data:

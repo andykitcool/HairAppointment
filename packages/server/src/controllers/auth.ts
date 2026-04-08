@@ -260,23 +260,69 @@ export async function adminLogin(ctx: Context) {
  * 申请成为店长
  */
 export async function applyOwner(ctx: Context) {
-  const { shop_name, phone, address, description } = ctx.request.body as {
+  const { shop_name, name, phone, address, description, business_hours } = ctx.request.body as {
     shop_name: string
+    name?: string
     phone: string
     address?: string
     description?: string
+    business_hours?: { start?: string; end?: string }
   }
-  const userId = ctx.state.user._id
+  const userId = ctx.state.user?._id
+  const merchantName = (shop_name || name || '').trim()
 
-  if (!shop_name || !phone) {
+  if (!userId) {
+    ctx.status = 401
+    ctx.body = { code: 401, message: '请先登录', data: null }
+    return
+  }
+
+  if (!merchantName || !phone) {
     ctx.body = { code: 400, message: '缺少必填字段', data: null }
     return
   }
 
   try {
+    const user = await UserModel.findById(userId)
+
     // 检查是否已申请或已是店长
     const existingMerchant = await MerchantModel.findOne({ owner_id: userId.toString() })
     if (existingMerchant) {
+      // 已拒绝可再次申请：覆盖原申请内容并重置为申请中
+      if (existingMerchant.status === 'rejected') {
+        await MerchantModel.updateOne(
+          { _id: existingMerchant._id },
+          {
+            name: merchantName,
+            phone,
+            address,
+            description,
+            business_hours: {
+              ...(existingMerchant.business_hours || {}),
+              start: business_hours?.start || existingMerchant.business_hours?.start || '09:00',
+              end: business_hours?.end || existingMerchant.business_hours?.end || '21:00',
+            },
+            status: 'applying',
+            application_info: {
+              applicant_name: user?.real_name || user?.nickname || '',
+              applicant_phone: user?.phone || phone,
+              applicant_wx_openid: user?.openid || '',
+              apply_time: new Date(),
+              review_note: '',
+              review_time: undefined,
+              reviewer_id: '',
+            },
+          }
+        )
+
+        ctx.body = {
+          code: 0,
+          message: '已重新提交申请，等待审核',
+          data: { merchant_id: existingMerchant.merchant_id },
+        }
+        return
+      }
+
       ctx.body = { code: 400, message: '已有申请或已是店长', data: null }
       return
     }
@@ -284,13 +330,22 @@ export async function applyOwner(ctx: Context) {
     // 创建待审核商户
     const merchant = await MerchantModel.create({
       merchant_id: generateShortId('M'),
-      name: shop_name,
+      name: merchantName,
       phone,
       address,
       description,
-      status: 'pending',
+      status: 'applying',
       owner_id: userId.toString(),
-      business_hours: { start: '09:00', end: '21:00' },
+      business_hours: {
+        start: business_hours?.start || '09:00',
+        end: business_hours?.end || '21:00',
+      },
+      application_info: {
+        applicant_name: user?.real_name || user?.nickname || '',
+        applicant_phone: user?.phone || phone,
+        applicant_wx_openid: user?.openid || '',
+        apply_time: new Date(),
+      },
       daily_counter: 0,
       counter_date: '',
     })
@@ -299,6 +354,45 @@ export async function applyOwner(ctx: Context) {
   } catch (err: any) {
     ctx.status = 500
     ctx.body = { code: 500, message: err.message, data: null }
+  }
+}
+
+/**
+ * 获取当前用户的店长申请信息
+ */
+export async function getOwnerApplication(ctx: Context) {
+  const userId = ctx.state.user?._id
+  if (!userId) {
+    ctx.status = 401
+    ctx.body = { code: 401, message: '请先登录', data: null }
+    return
+  }
+
+  const merchant = await MerchantModel.findOne({ owner_id: userId.toString() }).sort({ create_time: -1 })
+  if (!merchant) {
+    ctx.body = { code: 0, message: 'ok', data: { has_application: false } }
+    return
+  }
+
+  ctx.body = {
+    code: 0,
+    message: 'ok',
+    data: {
+      has_application: true,
+      merchant_id: merchant.merchant_id,
+      status: merchant.status,
+      review_note: merchant.application_info?.review_note || '',
+      name: merchant.name || '',
+      phone: merchant.phone || '',
+      address: merchant.address || '',
+      description: merchant.description || '',
+      business_hours: {
+        start: merchant.business_hours?.start || '09:00',
+        end: merchant.business_hours?.end || '21:00',
+      },
+      apply_time: merchant.application_info?.apply_time || merchant.create_time,
+      review_time: merchant.application_info?.review_time,
+    },
   }
 }
 

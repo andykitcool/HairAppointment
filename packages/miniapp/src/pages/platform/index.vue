@@ -43,7 +43,7 @@
         </view>
 
         <view class="ai-pair-item">
-          <text class="ai-sub-title">推荐效果图</text>
+          <text class="ai-sub-title">{{ currentMonthLabel }}</text>
           <view class="ai-pair-box">
             <image
               v-if="aiResultImage"
@@ -68,22 +68,14 @@
       <view v-if="aiError" class="ai-error">{{ aiError }}</view>
     </view>
 
-    <view v-if="!keyword && locationDenied" class="location-tip">
-      <view>
-        <text class="location-tip-title">附近门店需要定位授权</text>
-        <text class="location-tip-desc">你也可以直接搜索门店名称进入预约</text>
-      </view>
-      <view class="location-tip-btn" @tap="retryNearby">重新定位</view>
-    </view>
-
     <view class="section">
       <view v-if="displayMerchantList.length" class="list-summary">
         <text class="list-summary-text">{{ searched && keyword ? '搜索结果' : '附近优选' }}</text>
         <text class="list-summary-count">共 {{ displayMerchantList.length }} 家</text>
       </view>
       <view v-if="searchLoading || nearbyLoading" class="status">加载中...</view>
-      <view v-else-if="displayMerchantList.length === 0" class="status">
-        {{ locationDenied ? '未授权定位，请先使用搜索' : (searched ? '未找到相关门店' : '暂无可展示门店') }}
+      <view v-else-if="displayMerchantList.length === 0 && !locationDenied" class="status">
+        {{ searched ? '未找到相关门店' : '暂无可展示门店' }}
       </view>
       <view
         v-for="m in displayMerchantList"
@@ -98,6 +90,20 @@
         <view class="merchant-right">
           <text v-if="formatDistance(m.distance)" class="distance">{{ formatDistance(m.distance) }}</text>
           <text class="enter">去预约</text>
+        </view>
+      </view>
+    </view>
+
+    <view v-if="showLocationAuthSheet" class="auth-sheet-wrap">
+      <view class="auth-sheet-mask" @tap="closeLocationAuthSheet"></view>
+      <view class="auth-sheet-panel">
+        <view class="auth-sheet-head">
+          <text class="auth-sheet-title">开启定位，快速发现附近门店</text>
+          <text class="auth-sheet-desc">用于展示你附近可预约门店，你也可以稍后再授权</text>
+        </view>
+        <view class="auth-sheet-actions">
+          <view class="auth-btn auth-btn-ghost" @tap="closeLocationAuthSheet">暂不授权</view>
+          <button class="auth-btn auth-btn-primary" @tap="requestLocationPermission">允许授权</button>
         </view>
       </view>
     </view>
@@ -122,6 +128,7 @@ const locationDenied = ref(false)
 const searched = ref(false)
 const ads = ref<any[]>([])
 const cozeEnabled = ref(false)
+const showLocationAuthSheet = ref(false)
 const aiGenerating = ref(false)
 const aiProgress = ref(0)
 const aiStatusText = ref('')
@@ -163,6 +170,7 @@ const displayMerchantList = computed(() => {
   const hasKeyword = keyword.value.trim().length > 0
   return hasKeyword ? searchList.value : nearbyList.value
 })
+const currentMonthLabel = computed(() => `${new Date().getMonth() + 1}月推荐发型`)
 
 function normalizeAdImageUrl(url: string): string {
   if (!url) return ''
@@ -224,7 +232,7 @@ async function loadSearch() {
   }
 }
 
-async function loadNearby() {
+async function loadNearby(options?: { promptOnDenied?: boolean }) {
   nearbyLoading.value = true
   locationDenied.value = false
   try {
@@ -240,6 +248,23 @@ async function loadNearby() {
   } catch {
     locationDenied.value = true
     nearbyList.value = []
+    if (options?.promptOnDenied) {
+      uni.showModal({
+        title: '需要定位权限',
+        content: '请在设置中开启定位权限后重试',
+        success: (res) => {
+          if (!res.confirm) return
+          uni.openSetting({
+            success: (settingRes) => {
+              const granted = !!settingRes?.authSetting?.['scope.userLocation']
+              if (granted) {
+                void loadNearby()
+              }
+            },
+          })
+        },
+      })
+    }
   } finally {
     nearbyLoading.value = false
   }
@@ -261,6 +286,29 @@ function clearSearch() {
 
 function retryNearby() {
   void loadNearby()
+}
+
+function closeLocationAuthSheet() {
+  showLocationAuthSheet.value = false
+}
+
+async function requestLocationPermission() {
+  showLocationAuthSheet.value = false
+  void loadNearby({ promptOnDenied: true })
+}
+
+async function checkLocationPermissionAndPrompt(): Promise<boolean> {
+  try {
+    const setting = await new Promise<any>((resolve, reject) => {
+      uni.getSetting({ success: resolve, fail: reject })
+    })
+    const granted = !!setting?.authSetting?.['scope.userLocation']
+    showLocationAuthSheet.value = !granted
+    return granted
+  } catch {
+    showLocationAuthSheet.value = true
+    return false
+  }
 }
 
 function formatDistance(distance: any) {
@@ -424,9 +472,12 @@ onShow(() => {
   void loadLatestAiFromServer()
   void loadAds()
   void loadCozeConfig()
-  if (!nearbyList.value.length) {
-    void loadNearby()
-  }
+  void (async () => {
+    const granted = await checkLocationPermissionAndPrompt()
+    if (granted && !nearbyList.value.length) {
+      await loadNearby()
+    }
+  })()
 })
 
 onHide(() => {
@@ -689,4 +740,60 @@ onShareTimeline(() => {
 .merchant-right { display: flex; flex-direction: column; align-items: flex-end; }
 .distance { font-size: 22rpx; color: #34c759; margin-bottom: 6rpx; }
 .enter { font-size: 24rpx; color: #333; }
+
+.auth-sheet-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+
+.auth-sheet-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.auth-sheet-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 30rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
+}
+
+.auth-sheet-head { margin-bottom: 24rpx; }
+.auth-sheet-title { display: block; font-size: 32rpx; font-weight: 700; color: #1b2d24; }
+.auth-sheet-desc { display: block; margin-top: 10rpx; font-size: 24rpx; color: #5f7268; }
+
+.auth-sheet-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.auth-btn {
+  flex: 1;
+  height: 82rpx;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.auth-btn-ghost {
+  background: #f2f5f3;
+  color: #3d5348;
+}
+
+.auth-btn-primary {
+  background: #22a160;
+  color: #fff;
+}
+
+.auth-btn-primary::after {
+  border: none;
+}
 </style>

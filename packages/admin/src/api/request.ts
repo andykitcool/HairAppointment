@@ -148,6 +148,10 @@ export const adminApi = {
   getPlatformCoze: () => http.get('/admin/platform-coze'),
   updatePlatformCoze: (data: any) => http.put('/admin/platform-coze', data),
 
+  // 高德开放平台配置
+  getAmapConfig: () => http.get('/admin/amap-config'),
+  updateAmapConfig: (data: any) => http.put('/admin/amap-config', data),
+
   // 系统邮件配置
   getSystemEmailConfig: () => http.get('/admin/system-email'),
   updateSystemEmailConfig: (data: any) => http.put('/admin/system-email', data),
