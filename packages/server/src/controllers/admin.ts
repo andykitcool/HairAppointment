@@ -1,5 +1,5 @@
 import { Context } from 'koa'
-import { MerchantModel, AdminModel, AppointmentModel, TransactionModel, UserModel, ServiceModel, StaffModel, PlatformAdModel, PlatformConfigModel } from '../models/index.js'
+import { MerchantModel, AdminModel, AppointmentModel, TransactionModel, UserModel, ServiceModel, StaffModel, PlatformAdModel, PlatformConfigModel, AiUsageLogModel } from '../models/index.js'
 import { generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
 import bcrypt from 'bcryptjs'
 import { initializeMerchant } from './merchant.js'
@@ -20,6 +20,61 @@ function parsePort(port: unknown): number {
   const value = Number(port)
   if (!Number.isFinite(value) || value <= 0) return 465
   return Math.floor(value)
+}
+
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function startOfDay(date: Date): Date {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function endOfDay(date: Date): Date {
+  const d = startOfDay(date)
+  d.setDate(d.getDate() + 1)
+  return d
+}
+
+function parseRegionFromAddress(address: string): string {
+  const raw = String(address || '').trim()
+  if (!raw) return '未标注地区'
+
+  if (raw.includes('北京市')) return '北京市'
+  if (raw.includes('上海市')) return '上海市'
+  if (raw.includes('天津市')) return '天津市'
+  if (raw.includes('重庆市')) return '重庆市'
+
+  const provinceMatch = raw.match(/^(.*?(省|自治区|特别行政区))/)
+  if (provinceMatch?.[1]) return provinceMatch[1]
+
+  const cityMatch = raw.match(/^(.*?市)/)
+  if (cityMatch?.[1]) return cityMatch[1]
+
+  return '其他地区'
+}
+
+function fillDailyTrend(
+  startDate: Date,
+  days: number,
+  valueMap: Map<string, number>,
+): Array<{ date: string; count: number }> {
+  const list: Array<{ date: string; count: number }> = []
+  for (let i = 0; i < days; i++) {
+    const current = new Date(startDate)
+    current.setDate(startDate.getDate() + i)
+    const key = formatLocalDate(current)
+    list.push({
+      date: key,
+      count: valueMap.get(key) || 0,
+    })
+  }
+  return list
 }
 
 /**
@@ -514,21 +569,257 @@ export async function updateSystemEmailConfig(ctx: Context) {
  * 平台级统计
  */
 export async function getPlatformStats(ctx: Context) {
-  const totalMerchants = await MerchantModel.countDocuments({ status: 'active' })
-  const totalCustomers = await UserModel.countDocuments({ role: 'customer' })
-  const totalAppointments = await AppointmentModel.countDocuments()
-  const totalRevenue = await TransactionModel.aggregate([
-    { $group: { _id: null, total: { $sum: '$total_amount' } } },
+  const now = new Date()
+  const todayStart = startOfDay(now)
+  const todayEnd = endOfDay(now)
+
+  const yesterday = new Date(todayStart)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  const sevenDayStart = new Date(todayStart)
+  sevenDayStart.setDate(sevenDayStart.getDate() - 6)
+
+  const thirtyDayStart = new Date(todayStart)
+  thirtyDayStart.setDate(thirtyDayStart.getDate() - 29)
+
+  const todayStr = formatLocalDate(todayStart)
+  const yesterdayStr = formatLocalDate(yesterday)
+  const sevenDayStartStr = formatLocalDate(sevenDayStart)
+  const thirtyDayStartStr = formatLocalDate(thirtyDayStart)
+
+  const [
+    totalCustomers,
+    totalAppointments,
+    totalRevenueAgg,
+    merchantStatusAgg,
+    todayAppointments,
+    yesterdayAppointments,
+    todayRevenueAgg,
+    yesterdayRevenueAgg,
+    todayAiUsage,
+    yesterdayAiUsage,
+    appointments7dAgg,
+    revenue7dAgg,
+    ai7dAgg,
+    merchants,
+    appointmentByMerchant30d,
+    aiByMerchant30d,
+    appointmentByMerchantToday,
+    aiByMerchantToday,
+    revenueByMerchantToday,
+  ] = await Promise.all([
+    UserModel.countDocuments({ role: 'customer' }),
+    AppointmentModel.countDocuments(),
+    TransactionModel.aggregate([{ $group: { _id: null, total: { $sum: '$total_amount' } } }]),
+    MerchantModel.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+    AppointmentModel.countDocuments({ date: todayStr }),
+    AppointmentModel.countDocuments({ date: yesterdayStr }),
+    TransactionModel.aggregate([
+      { $match: { transaction_date: todayStr } },
+      { $group: { _id: null, total: { $sum: '$total_amount' } } },
+    ]),
+    TransactionModel.aggregate([
+      { $match: { transaction_date: yesterdayStr } },
+      { $group: { _id: null, total: { $sum: '$total_amount' } } },
+    ]),
+    AiUsageLogModel.countDocuments({ create_time: { $gte: todayStart, $lt: todayEnd } }),
+    AiUsageLogModel.countDocuments({ create_time: { $gte: yesterday, $lt: todayStart } }),
+    AppointmentModel.aggregate([
+      { $match: { date: { $gte: sevenDayStartStr, $lte: todayStr } } },
+      { $group: { _id: '$date', count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    TransactionModel.aggregate([
+      { $match: { transaction_date: { $gte: sevenDayStartStr, $lte: todayStr } } },
+      { $group: { _id: '$transaction_date', total: { $sum: '$total_amount' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    AiUsageLogModel.aggregate([
+      { $match: { create_time: { $gte: sevenDayStart, $lt: todayEnd } } },
+      { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$create_time' } }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } },
+    ]),
+    MerchantModel.find({}, { merchant_id: 1, name: 1, status: 1, address: 1 }).lean(),
+    AppointmentModel.aggregate([
+      { $match: { date: { $gte: thirtyDayStartStr, $lte: todayStr } } },
+      { $group: { _id: '$merchant_id', count: { $sum: 1 } } },
+    ]),
+    AiUsageLogModel.aggregate([
+      { $match: { create_time: { $gte: thirtyDayStart, $lt: todayEnd } } },
+      { $group: { _id: '$merchant_id', count: { $sum: 1 } } },
+    ]),
+    AppointmentModel.aggregate([
+      { $match: { date: todayStr } },
+      { $group: { _id: '$merchant_id', count: { $sum: 1 } } },
+    ]),
+    AiUsageLogModel.aggregate([
+      { $match: { create_time: { $gte: todayStart, $lt: todayEnd } } },
+      { $group: { _id: '$merchant_id', count: { $sum: 1 } } },
+    ]),
+    TransactionModel.aggregate([
+      { $match: { transaction_date: todayStr } },
+      { $group: { _id: '$merchant_id', total: { $sum: '$total_amount' } } },
+    ]),
   ])
+
+  const statusMap = new Map<string, number>()
+  merchantStatusAgg.forEach((item: any) => {
+    statusMap.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const merchantStatus = {
+    active: statusMap.get('active') || 0,
+    inactive: statusMap.get('inactive') || 0,
+    pending: statusMap.get('pending') || 0,
+    applying: statusMap.get('applying') || 0,
+    rejected: statusMap.get('rejected') || 0,
+  }
+
+  const totalMerchants =
+    merchantStatus.active +
+    merchantStatus.inactive +
+    merchantStatus.pending +
+    merchantStatus.applying +
+    merchantStatus.rejected
+
+  const appointmentsMap = new Map<string, number>()
+  appointments7dAgg.forEach((item: any) => {
+    appointmentsMap.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const revenueMap = new Map<string, number>()
+  revenue7dAgg.forEach((item: any) => {
+    revenueMap.set(String(item._id || ''), Number(item.total || 0))
+  })
+
+  const aiMap = new Map<string, number>()
+  ai7dAgg.forEach((item: any) => {
+    aiMap.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const appointmentMerchant30Map = new Map<string, number>()
+  appointmentByMerchant30d.forEach((item: any) => {
+    appointmentMerchant30Map.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const aiMerchant30Map = new Map<string, number>()
+  aiByMerchant30d.forEach((item: any) => {
+    aiMerchant30Map.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const appointmentMerchantTodayMap = new Map<string, number>()
+  appointmentByMerchantToday.forEach((item: any) => {
+    appointmentMerchantTodayMap.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const aiMerchantTodayMap = new Map<string, number>()
+  aiByMerchantToday.forEach((item: any) => {
+    aiMerchantTodayMap.set(String(item._id || ''), Number(item.count || 0))
+  })
+
+  const revenueMerchantTodayMap = new Map<string, number>()
+  revenueByMerchantToday.forEach((item: any) => {
+    revenueMerchantTodayMap.set(String(item._id || ''), Number(item.total || 0))
+  })
+
+  const regionAccumulator = new Map<
+    string,
+    { region: string; merchant_count: number; appointment_count_30d: number; ai_usage_count_30d: number }
+  >()
+
+  for (const merchant of merchants) {
+    if (merchant.status !== 'active') continue
+    const region = parseRegionFromAddress(String(merchant.address || ''))
+    const current = regionAccumulator.get(region) || {
+      region,
+      merchant_count: 0,
+      appointment_count_30d: 0,
+      ai_usage_count_30d: 0,
+    }
+
+    const merchantId = String(merchant.merchant_id || '')
+    current.merchant_count += 1
+    current.appointment_count_30d += appointmentMerchant30Map.get(merchantId) || 0
+    current.ai_usage_count_30d += aiMerchant30Map.get(merchantId) || 0
+    regionAccumulator.set(region, current)
+  }
+
+  const geoDistribution = Array.from(regionAccumulator.values())
+    .sort((a, b) => {
+      if (b.appointment_count_30d !== a.appointment_count_30d) {
+        return b.appointment_count_30d - a.appointment_count_30d
+      }
+      return b.merchant_count - a.merchant_count
+    })
+    .slice(0, 10)
+
+  const topMerchants = merchants
+    .filter((merchant) => merchant.status === 'active')
+    .map((merchant) => {
+      const merchantId = String(merchant.merchant_id || '')
+      return {
+        merchant_id: merchantId,
+        merchant_name: String(merchant.name || merchantId),
+        today_appointments: appointmentMerchantTodayMap.get(merchantId) || 0,
+        ai_usage_today: aiMerchantTodayMap.get(merchantId) || 0,
+        revenue_today: revenueMerchantTodayMap.get(merchantId) || 0,
+      }
+    })
+    .sort((a, b) => {
+      if (b.today_appointments !== a.today_appointments) {
+        return b.today_appointments - a.today_appointments
+      }
+      if (b.ai_usage_today !== a.ai_usage_today) {
+        return b.ai_usage_today - a.ai_usage_today
+      }
+      return b.revenue_today - a.revenue_today
+    })
+    .slice(0, 8)
+
+  const appointments7d = fillDailyTrend(sevenDayStart, 7, appointmentsMap)
+  const aiUsage7d = fillDailyTrend(sevenDayStart, 7, aiMap)
+  const revenue7d = fillDailyTrend(sevenDayStart, 7, revenueMap)
+
+  const todayRevenue = Number(todayRevenueAgg[0]?.total || 0)
+  const yesterdayRevenue = Number(yesterdayRevenueAgg[0]?.total || 0)
 
   ctx.body = {
     code: 0,
     message: 'ok',
     data: {
+      summary: {
+        total_merchants: totalMerchants,
+        active_merchants: merchantStatus.active,
+        total_customers: totalCustomers,
+        total_appointments: totalAppointments,
+        total_revenue: Number(totalRevenueAgg[0]?.total || 0),
+      },
+      daily: {
+        date: todayStr,
+        today_appointments: todayAppointments,
+        yesterday_appointments: yesterdayAppointments,
+        today_revenue: todayRevenue,
+        yesterday_revenue: yesterdayRevenue,
+        today_ai_usage: todayAiUsage,
+        yesterday_ai_usage: yesterdayAiUsage,
+      },
+      merchant_status: {
+        ...merchantStatus,
+        total: totalMerchants,
+      },
+      trends: {
+        appointments_7d: appointments7d,
+        ai_usage_7d: aiUsage7d,
+        revenue_7d: revenue7d,
+      },
+      geo_distribution: geoDistribution,
+      top_merchants: topMerchants,
+      // 兼容旧版前端
       total_merchants: totalMerchants,
       total_customers: totalCustomers,
       total_appointments: totalAppointments,
-      total_revenue: totalRevenue[0]?.total || 0,
+      total_revenue: Number(totalRevenueAgg[0]?.total || 0),
+      updated_at: new Date().toISOString(),
     },
   }
 }
