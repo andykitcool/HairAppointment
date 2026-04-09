@@ -1,5 +1,6 @@
 <template>
-  <div class="platform-dashboard" v-loading="loading">
+  <div class="platform-dashboard">
+    <template v-if="isSuperAdmin">
     <section class="hero">
       <div>
         <p class="hero-subtitle">PLATFORM CONTROL TOWER</p>
@@ -69,7 +70,7 @@
     </section>
 
     <section class="panel-grid panel-grid-2">
-      <el-card class="panel-card" shadow="never">
+      <el-card class="panel-card" shadow="never" v-loading="mapLoading" element-loading-text="地图加载中...">
         <template #header>
           <div class="panel-header">
             <span>用户地理分布（估算）</span>
@@ -115,13 +116,100 @@
         <el-empty v-if="!stats.top_merchants.length" description="暂无排行数据" :image-size="68" />
       </el-card>
     </section>
+    </template>
+
+    <template v-else>
+      <section class="hero merchant-hero">
+        <div>
+          <p class="hero-subtitle">MERCHANT PERFORMANCE</p>
+          <h1>门店数据总览</h1>
+          <p class="hero-desc">
+            仅展示当前账号所属门店的预约、营收与到店经营数据。
+          </p>
+        </div>
+        <div class="hero-meta">
+          <div>
+            <span>门店ID</span>
+            <strong>{{ authStore.user.merchantId || '--' }}</strong>
+          </div>
+          <div>
+            <span>统计日期</span>
+            <strong>{{ merchantStats.date || '--' }}</strong>
+          </div>
+          <el-button type="primary" plain @click="loadData">刷新数据</el-button>
+        </div>
+      </section>
+
+      <section class="kpi-grid merchant-grid">
+        <article class="kpi-card">
+          <p class="kpi-title">今日预约</p>
+          <p class="kpi-value">{{ merchantStats.todayAppointments }}</p>
+          <p class="kpi-extra">待处理 {{ merchantStats.pendingCount }}</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">今日营收</p>
+          <p class="kpi-value">¥{{ toYuan(merchantStats.todayRevenue) }}</p>
+          <p class="kpi-extra">基于今日交易统计</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">累计顾客</p>
+          <p class="kpi-value">{{ merchantStats.totalCustomers }}</p>
+          <p class="kpi-extra">当前门店客户沉淀</p>
+        </article>
+        <article class="kpi-card">
+          <p class="kpi-title">今日客单价</p>
+          <p class="kpi-value">¥{{ merchantAvgPrice }}</p>
+          <p class="kpi-extra">按今日完成单估算</p>
+        </article>
+      </section>
+
+      <section class="panel-grid panel-grid-2">
+        <el-card class="panel-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <span>待处理预约</span>
+              <small>仅当前门店</small>
+            </div>
+          </template>
+          <el-table :data="merchantPendingList" stripe size="small" max-height="360">
+            <el-table-column prop="appointment_id" label="预约号" width="132" />
+            <el-table-column prop="customer_name" label="顾客" width="100" />
+            <el-table-column prop="service_name" label="服务" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="start_time" label="时间" width="90" />
+            <el-table-column prop="staff_name" label="员工" width="90" />
+          </el-table>
+          <el-empty v-if="!merchantPendingList.length" description="暂无待处理预约" :image-size="68" />
+        </el-card>
+
+        <el-card class="panel-card" shadow="never">
+          <template #header>
+            <div class="panel-header">
+              <span>最近交易</span>
+              <small>仅当前门店</small>
+            </div>
+          </template>
+          <el-table :data="merchantRecentTransactions" stripe size="small" max-height="360">
+            <el-table-column prop="transaction_date" label="日期" width="110" />
+            <el-table-column prop="customer_name" label="顾客" width="100" />
+            <el-table-column label="项目" min-width="130">
+              <template #default="{ row }">{{ (row.items || []).map((i: any) => i.service_name).join('、') }}</template>
+            </el-table-column>
+            <el-table-column label="金额" width="110">
+              <template #default="{ row }">¥{{ toYuan(row.total_amount) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!merchantRecentTransactions.length" description="暂无交易记录" :image-size="68" />
+        </el-card>
+      </section>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { adminApi } from '@/api/request'
+import { adminApi, appointmentApi, customerApi, statsApi, transactionApi } from '@/api/request'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 
 interface EChartsLike {
   init: (el: HTMLElement) => EChartsInstanceLike
@@ -197,7 +285,22 @@ interface PlatformStatsPayload {
 }
 
 const loading = ref(false)
+const mapLoading = ref(false)
 const chinaMapRef = ref<HTMLElement | null>(null)
+const authStore = useAuthStore()
+const isSuperAdmin = computed(() => authStore.isSuperAdmin)
+
+const merchantStats = ref({
+  date: '',
+  todayAppointments: 0,
+  pendingCount: 0,
+  todayRevenue: 0,
+  totalCustomers: 0,
+  completedCount: 0,
+})
+const merchantPendingList = ref<any[]>([])
+const merchantRecentTransactions = ref<any[]>([])
+
 let mapInstance: EChartsInstanceLike | null = null
 let mapReadyPromise: Promise<void> | null = null
 let chinaMapReadyPromise: Promise<void> | null = null
@@ -334,6 +437,12 @@ const mapSeriesData = computed(() => {
   }))
 })
 
+const merchantAvgPrice = computed(() => {
+  const completed = Number(merchantStats.value.completedCount || 0)
+  if (!completed) return '0.00'
+  return (Number(merchantStats.value.todayRevenue || 0) / completed / 100).toFixed(2)
+})
+
 function getGeoPercent(value: number): number {
   const max = Math.max(...stats.value.geo_distribution.map((item) => item.appointment_count_30d), 1)
   return Number(((value / max) * 100).toFixed(1))
@@ -361,14 +470,25 @@ function normalizeProvinceName(region: string): string {
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error(`加载脚本超时: ${src}`))
+    }, 8000)
+
     const existing = document.querySelector(`script[src="${src}"]`) as HTMLScriptElement | null
     if (existing) {
       if ((existing as any).dataset.loaded === 'true') {
+        window.clearTimeout(timeout)
         resolve()
         return
       }
-      existing.addEventListener('load', () => resolve(), { once: true })
-      existing.addEventListener('error', () => reject(new Error(`加载脚本失败: ${src}`)), { once: true })
+      existing.addEventListener('load', () => {
+        window.clearTimeout(timeout)
+        resolve()
+      }, { once: true })
+      existing.addEventListener('error', () => {
+        window.clearTimeout(timeout)
+        reject(new Error(`加载脚本失败: ${src}`))
+      }, { once: true })
       return
     }
 
@@ -377,9 +497,13 @@ function loadScript(src: string): Promise<void> {
     script.async = true
     script.onload = () => {
       ;(script as any).dataset.loaded = 'true'
+      window.clearTimeout(timeout)
       resolve()
     }
-    script.onerror = () => reject(new Error(`加载脚本失败: ${src}`))
+    script.onerror = () => {
+      window.clearTimeout(timeout)
+      reject(new Error(`加载脚本失败: ${src}`))
+    }
     document.head.appendChild(script)
   })
 }
@@ -446,13 +570,19 @@ async function ensureChinaMapRegistered() {
 }
 
 async function renderChinaMap() {
-  if (!chinaMapRef.value || !stats.value.geo_distribution.length) return
+  if (!chinaMapRef.value || !stats.value.geo_distribution.length) {
+    mapLoading.value = false
+    return
+  }
+
+  mapLoading.value = true
 
   try {
     await ensureMapReady()
     await ensureChinaMapRegistered()
   } catch (error: any) {
     ElMessage.error(error?.message || '加载地图资源失败')
+    mapLoading.value = false
     return
   }
 
@@ -528,6 +658,8 @@ async function renderChinaMap() {
     },
     true,
   )
+
+  mapLoading.value = false
 }
 
 function handleMapResize() {
@@ -550,7 +682,13 @@ function formatDateTime(input: string): string {
 }
 
 async function loadData() {
+  if (!isSuperAdmin.value) {
+    await loadMerchantData()
+    return
+  }
+
   loading.value = true
+  mapLoading.value = true
   try {
     const res = await adminApi.getPlatformStats() as any
     const payload = (res?.data ?? res) as Partial<PlatformStatsPayload>
@@ -578,9 +716,57 @@ async function loadData() {
       updated_at: String(payload.updated_at || ''),
     }
     await nextTick()
-    await renderChinaMap()
+    void renderChinaMap()
   } catch (error: any) {
     ElMessage.error(error?.response?.data?.message || '加载平台数据失败')
+    mapLoading.value = false
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadMerchantData() {
+  const merchantId = authStore.user.merchantId
+  if (!merchantId) {
+    ElMessage.warning('当前账号未绑定门店，无法加载门店总览')
+    return
+  }
+
+  loading.value = true
+  try {
+    const today = new Date()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    const date = `${today.getFullYear()}-${month}-${day}`
+
+    const [aptRes, revenueRes, txRes, customerRes] = await Promise.all([
+      appointmentApi.getList({ merchant_id: merchantId, date, pageSize: 80 }) as any,
+      statsApi.getRevenue({ merchant_id: merchantId, start_date: date, end_date: date }) as any,
+      transactionApi.getList({ merchant_id: merchantId, pageSize: 12 }) as any,
+      customerApi.getList({ merchant_id: merchantId, pageSize: 1 }) as any,
+    ])
+
+    const aptPayload = aptRes?.data ?? aptRes
+    const revenuePayload = revenueRes?.data ?? revenueRes
+    const txPayload = txRes?.data ?? txRes
+    const customerPayload = customerRes?.data ?? customerRes
+
+    const aptList = Array.isArray(aptPayload?.list) ? aptPayload.list : []
+    const pending = aptList.filter((item: any) => item.status === 'pending')
+    const summaryPayload = revenuePayload?.summary || {}
+
+    merchantPendingList.value = pending
+    merchantRecentTransactions.value = Array.isArray(txPayload?.list) ? txPayload.list : []
+    merchantStats.value = {
+      date,
+      todayAppointments: aptList.length,
+      pendingCount: pending.length,
+      todayRevenue: Number(summaryPayload.totalRevenue || revenuePayload?.total_revenue || 0),
+      totalCustomers: Number(customerPayload?.total || 0),
+      completedCount: Number(summaryPayload.completedCount || revenuePayload?.completed_appointments || 0),
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '加载门店总览失败')
   } finally {
     loading.value = false
   }
@@ -594,6 +780,7 @@ onMounted(() => {
 watch(
   () => stats.value.geo_distribution,
   async () => {
+    if (!isSuperAdmin.value) return
     await nextTick()
     await renderChinaMap()
   },

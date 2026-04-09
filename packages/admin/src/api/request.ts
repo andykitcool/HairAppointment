@@ -55,6 +55,10 @@ export const wechatConfigApi = {
   create: (data: any) => http.post('/wechat-config', data),
   update: (id: string, data: any) => http.put(`/wechat-config/${id}`, data),
   delete: (id: string) => http.delete(`/wechat-config/${id}`),
+  uploadMiniProgram: (id: string, data: { version?: string; desc?: string }) =>
+    http.post(`/wechat-config/${id}/upload`, data, { timeout: 300000 }),
+  submitMiniProgram: (id: string) => http.post(`/wechat-config/${id}/submit`, undefined, { timeout: 300000 }),
+  releaseMiniProgram: (id: string) => http.post(`/wechat-config/${id}/release`, undefined, { timeout: 300000 }),
 }
 
 export const appointmentApi = {

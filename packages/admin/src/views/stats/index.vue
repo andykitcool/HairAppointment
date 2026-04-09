@@ -100,6 +100,14 @@ const avgPrice = computed(() => {
   return count > 0 ? ((summary.value.totalRevenue || 0) / count / 100).toFixed(2) : '0.00'
 })
 
+function pad(n: number): string {
+  return String(n).padStart(2, '0')
+}
+
+function formatDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 function getDateParams(): any {
   const params: any = { merchant_id: authStore.user.merchantId }
   if (dateRange.value) {
@@ -110,17 +118,68 @@ function getDateParams(): any {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
+    return params
   }
+
+  const now = new Date()
+  if (period.value === 'day') {
+    const d = formatDate(now)
+    params.start_date = d
+    params.end_date = d
+    return params
+  }
+
+  if (period.value === 'week') {
+    const start = new Date(now)
+    start.setDate(now.getDate() - 6)
+    params.start_date = formatDate(start)
+    params.end_date = formatDate(now)
+    return params
+  }
+
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  params.start_date = formatDate(start)
+  params.end_date = formatDate(now)
   return params
+}
+
+function normalizeStatsPayload(payload: any) {
+  const summaryPayload = payload?.summary || {}
+  const legacySummary = {
+    totalRevenue: payload?.total_revenue || 0,
+    transactionCount: payload?.total_transactions || 0,
+    appointmentCount: payload?.total_appointments || 0,
+    completedCount: payload?.completed_appointments || 0,
+    cancelCount: payload?.cancelled_appointments || 0,
+  }
+
+  return {
+    summary: {
+      ...legacySummary,
+      ...summaryPayload,
+    },
+    paymentDistribution: payload?.paymentDistribution || [],
+    serviceRanking: payload?.serviceRanking || payload?.service_ranking || [],
+    daily: payload?.daily || (payload?.daily_revenue || []).map((item: any) => ({
+      date: item.date,
+      amount: item.revenue || 0,
+      appointmentCount: 0,
+      completedCount: 0,
+      cancelCount: 0,
+    })),
+  }
 }
 
 async function loadData() {
   try {
-    const data = await statsApi.getRevenue(getDateParams()) as any
-    summary.value = data?.summary || {}
-    paymentData.value = data?.paymentDistribution || []
-    serviceRanking.value = data?.serviceRanking || []
-    dailyData.value = data?.daily || []
+    const res = await statsApi.getRevenue(getDateParams()) as any
+    const payload = res?.data ?? res
+    const normalized = normalizeStatsPayload(payload)
+
+    summary.value = normalized.summary
+    paymentData.value = normalized.paymentDistribution
+    serviceRanking.value = normalized.serviceRanking
+    dailyData.value = normalized.daily
   } catch (e) { console.error(e) }
 }
 

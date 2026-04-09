@@ -4,6 +4,52 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+function ensureMiniProgramCiNodePath() {
+  const expectedNodePath = '/usr/local/bin/node'
+  if (fs.existsSync(expectedNodePath)) {
+    return
+  }
+
+  const actualNodePath = process.execPath
+  if (!actualNodePath || !fs.existsSync(actualNodePath)) {
+    throw new Error('无法定位当前 Node.js 可执行文件')
+  }
+
+  const expectedDir = path.dirname(expectedNodePath)
+  if (!fs.existsSync(expectedDir)) {
+    fs.mkdirSync(expectedDir, { recursive: true })
+  }
+
+  try {
+    fs.symlinkSync(actualNodePath, expectedNodePath)
+  } catch (err: any) {
+    if (err?.code !== 'EEXIST') {
+      throw err
+    }
+  }
+}
+
+function resolveMiniProgramProjectPath() {
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = path.dirname(__filename)
+  const candidates = [
+    path.join(__dirname, '..', '..', '..', '..', 'packages', 'miniapp', 'dist', 'build', 'mp-weixin'),
+    path.join(__dirname, '..', '..', '..', '..', 'packages', 'miniapp', 'dist', 'dev', 'mp-weixin'),
+    path.join(process.cwd(), 'packages', 'miniapp', 'dist', 'build', 'mp-weixin'),
+    path.join(process.cwd(), 'packages', 'miniapp', 'dist', 'dev', 'mp-weixin'),
+    path.join(process.cwd(), 'miniapp', 'dist', 'build', 'mp-weixin'),
+    path.join(process.cwd(), 'miniapp', 'dist', 'dev', 'mp-weixin'),
+  ]
+
+  for (const projectPath of candidates) {
+    if (fs.existsSync(path.join(projectPath, 'app.json'))) {
+      return projectPath
+    }
+  }
+
+  return ''
+}
+
 /**
  * 获取微信配置列表
  */
@@ -222,6 +268,13 @@ export async function uploadMiniProgram(ctx: Context) {
       return
     }
 
+    try {
+      ensureMiniProgramCiNodePath()
+    } catch (err: any) {
+      ctx.body = { code: 500, message: `运行环境缺少 Node 执行入口: ${err.message}`, data: null }
+      return
+    }
+
     // 动态导入 miniprogram-ci
     let ci: any
     try {
@@ -234,7 +287,12 @@ export async function uploadMiniProgram(ctx: Context) {
 
     const __filename = fileURLToPath(import.meta.url)
     const __dirname = path.dirname(__filename)
-    const projectPath = path.join(__dirname, '..', '..', '..', '..', 'packages', 'miniapp')
+    const projectPath = resolveMiniProgramProjectPath()
+    if (!projectPath) {
+      ctx.body = { code: 500, message: '未找到可上传的小程序构建目录，请先执行小程序构建（需存在 dist/build/mp-weixin/app.json）', data: null }
+      return
+    }
+
     const privateKeyPath = path.join(__dirname, '..', '..', 'temp', `${config.appid}.key`)
 
     // 确保 temp 目录存在
@@ -310,6 +368,13 @@ export async function submitMiniProgram(ctx: Context) {
       return
     }
 
+    try {
+      ensureMiniProgramCiNodePath()
+    } catch (err: any) {
+      ctx.body = { code: 500, message: `运行环境缺少 Node 执行入口: ${err.message}`, data: null }
+      return
+    }
+
     // 动态导入 miniprogram-ci
     let ci: any
     try {
@@ -322,6 +387,12 @@ export async function submitMiniProgram(ctx: Context) {
 
     const __filename = fileURLToPath(import.meta.url)
     const __dirname = path.dirname(__filename)
+    const projectPath = resolveMiniProgramProjectPath()
+    if (!projectPath) {
+      ctx.body = { code: 500, message: '未找到可上传的小程序构建目录，请先执行小程序构建（需存在 dist/build/mp-weixin/app.json）', data: null }
+      return
+    }
+
     const privateKeyPath = path.join(__dirname, '..', '..', 'temp', `${config.appid}.key`)
 
     // 确保 temp 目录存在
@@ -338,7 +409,7 @@ export async function submitMiniProgram(ctx: Context) {
       const project = new ci.Project({
         appid: config.appid,
         type: 'miniProgram',
-        projectPath: path.join(__dirname, '..', '..', 'temp'),
+        projectPath,
         privateKeyPath: privateKeyPath,
         ignores: [],
       })
@@ -400,6 +471,13 @@ export async function releaseMiniProgram(ctx: Context) {
       return
     }
 
+    try {
+      ensureMiniProgramCiNodePath()
+    } catch (err: any) {
+      ctx.body = { code: 500, message: `运行环境缺少 Node 执行入口: ${err.message}`, data: null }
+      return
+    }
+
     // 动态导入 miniprogram-ci
     let ci: any
     try {
@@ -412,6 +490,12 @@ export async function releaseMiniProgram(ctx: Context) {
 
     const __filename = fileURLToPath(import.meta.url)
     const __dirname = path.dirname(__filename)
+    const projectPath = resolveMiniProgramProjectPath()
+    if (!projectPath) {
+      ctx.body = { code: 500, message: '未找到可上传的小程序构建目录，请先执行小程序构建（需存在 dist/build/mp-weixin/app.json）', data: null }
+      return
+    }
+
     const privateKeyPath = path.join(__dirname, '..', '..', 'temp', `${config.appid}.key`)
 
     // 确保 temp 目录存在
@@ -427,7 +511,7 @@ export async function releaseMiniProgram(ctx: Context) {
       const project = new ci.Project({
         appid: config.appid,
         type: 'miniProgram',
-        projectPath: path.join(__dirname, '..', '..', 'temp'),
+        projectPath,
         privateKeyPath: privateKeyPath,
         ignores: [],
       })

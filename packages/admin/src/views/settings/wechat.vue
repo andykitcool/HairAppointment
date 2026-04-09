@@ -160,7 +160,14 @@
 import { ref, reactive, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { wechatConfigApi } from '@/api/request'
-import axios from 'axios'
+
+function resolveRequestError(error: any, fallback: string) {
+  return (
+    error?.response?.data?.message ||
+    error?.message ||
+    fallback
+  )
+}
 
 const loading = ref(false)
 const configs = ref<any[]>([])
@@ -400,21 +407,18 @@ async function handleUpload() {
 
   uploading.value = true
   try {
-    const res: any = await axios.post(
-      `/api/wechat-config/${currentMpConfig.value._id}/upload`,
-      {
-        version: uploadForm.version,
-        desc: uploadForm.desc,
-      }
-    )
-    if (res.data.code === 0) {
+    const res: any = await wechatConfigApi.uploadMiniProgram(currentMpConfig.value._id, {
+      version: uploadForm.version,
+      desc: uploadForm.desc,
+    })
+    if (res.code === 0) {
       ElMessage.success('上传成功')
       showUploadCodeDialog.value = false
     } else {
-      ElMessage.error(res.data.message || '上传失败')
+      ElMessage.error(res.message || '上传失败')
     }
   } catch (error: any) {
-    ElMessage.error(error?.response?.data?.message || '上传失败')
+    ElMessage.error(resolveRequestError(error, '上传失败'))
   } finally {
     uploading.value = false
   }
@@ -426,15 +430,15 @@ async function handleSubmit(row: any) {
     await ElMessageBox.confirm('确定要提交小程序审核吗？', '提示', {
       type: 'warning',
     })
-    const res: any = await axios.post(`/api/wechat-config/${row._id}/submit`)
-    if (res.data.code === 0) {
+    const res: any = await wechatConfigApi.submitMiniProgram(row._id)
+    if (res.code === 0) {
       ElMessage.success('提交审核成功')
     } else {
-      ElMessage.error(res.data.message || '提交审核失败')
+      ElMessage.error(res.message || '提交审核失败')
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error?.response?.data?.message || '提交审核失败')
+      ElMessage.error(resolveRequestError(error, '提交审核失败'))
     }
   }
 }
@@ -445,15 +449,15 @@ async function handleRelease(row: any) {
     await ElMessageBox.confirm('确定要发布小程序吗？发布后用户将看到新版本。', '提示', {
       type: 'warning',
     })
-    const res: any = await axios.post(`/api/wechat-config/${row._id}/release`)
-    if (res.data.code === 0) {
+    const res: any = await wechatConfigApi.releaseMiniProgram(row._id)
+    if (res.code === 0) {
       ElMessage.success('发布成功')
     } else {
-      ElMessage.error(res.data.message || '发布失败')
+      ElMessage.error(res.message || '发布失败')
     }
   } catch (error: any) {
     if (error !== 'cancel') {
-      ElMessage.error(error?.response?.data?.message || '发布失败')
+      ElMessage.error(resolveRequestError(error, '发布失败'))
     }
   }
 }

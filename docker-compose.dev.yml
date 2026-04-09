@@ -30,6 +30,7 @@ services:
       # 挂载编译后的代码
       - ./packages/server/dist:/app/packages/server/dist
       - ./packages/shared/dist:/app/packages/shared/dist
+      - ./packages/miniapp:/app/packages/miniapp
       - ./package.json:/app/package.json
       # 挂载上传文件目录，确保文件持久化
       - ./uploads:/app/uploads
