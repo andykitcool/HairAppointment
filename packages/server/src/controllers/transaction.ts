@@ -2,6 +2,12 @@ import { Context } from 'koa'
 import { AdminModel, MerchantModel, TransactionModel } from '../models/index.js'
 import { generateShortId } from '../../../shared/dist/index.js'
 import { formatDate } from '../../../shared/dist/index.js'
+import {
+  buildCreateTransactionPayload,
+  buildTransactionListQuery,
+  buildUpdateTransactionPayload,
+  validateCreateTransactionInput,
+} from '../domain/transaction/rules.js'
 
 async function resolveOwnerRealName(ownerId?: string, fallbackName?: string) {
   if (!ownerId) return fallbackName || '店长'
@@ -25,40 +31,17 @@ async function resolveTransactionStaffInfo(merchant_id: string, staff_id?: strin
  */
 export async function createTransaction(ctx: Context) {
   const body = (ctx.request.body as any) || {}
-  const {
-    merchant_id, appointment_id, customer_id, customer_name, customer_source,
-    staff_id, staff_name, total_amount, items, payment_method, note,
-  } = body
-
-  if (!merchant_id || !total_amount) {
-    ctx.body = { code: 400, message: '缺少必填字段', data: null }
-    return
-  }
-
-  // 如果是直接到店，顾客姓名必填
-  if (customer_source === 'walk_in' && !customer_name) {
-    ctx.body = { code: 400, message: '直接到店的顾客需要填写姓名', data: null }
+  const validation = validateCreateTransactionInput(body)
+  if (!validation.valid) {
+    ctx.body = { code: validation.code, message: validation.message, data: null }
     return
   }
 
   try {
-    const resolvedStaff = await resolveTransactionStaffInfo(merchant_id, staff_id, staff_name)
-    const tx = await TransactionModel.create({
-      transaction_id: generateShortId('TX'),
-      merchant_id,
-      appointment_id,
-      customer_id,
-      customer_name,
-      customer_source: customer_source || 'walk_in',
-      staff_id: resolvedStaff.staff_id,
-      staff_name: resolvedStaff.staff_name,
-      total_amount,
-      items: items || [],
-      payment_method: payment_method || 'wechat',
-      source: body.source || 'mini_program',
-      note,
-      transaction_date: body.transaction_date || formatDate(new Date()),
-    })
+    const resolvedStaff = await resolveTransactionStaffInfo(body.merchant_id, body.staff_id, body.staff_name)
+    const tx = await TransactionModel.create(
+      buildCreateTransactionPayload(generateShortId('TX'), body, resolvedStaff, formatDate(new Date())),
+    )
 
     ctx.body = { code: 0, message: '记账成功', data: { transaction_id: tx.transaction_id } }
   } catch (err: any) {
@@ -74,11 +57,7 @@ export async function getTransactions(ctx: Context) {
   const { merchant_id, date, transaction_date, page = '1', pageSize = '20' } = ctx.query as any
   const user = ctx.state.user
 
-  const query: Record<string, any> = {}
-  if (merchant_id) query.merchant_id = merchant_id
-  else if (user.merchant_id) query.merchant_id = user.merchant_id
-
-  if (transaction_date || date) query.transaction_date = transaction_date || date
+  const query = buildTransactionListQuery({ merchant_id, date, transaction_date }, user.merchant_id)
 
   const total = await TransactionModel.countDocuments(query)
   const list = await TransactionModel.find(query)
@@ -127,16 +106,7 @@ export async function updateTransaction(ctx: Context) {
     body.staff_name || existing.staff_name,
   )
 
-  const updateData = {
-    customer_name: body.customer_name ?? existing.customer_name,
-    total_amount: body.total_amount ?? existing.total_amount,
-    items: body.items ?? existing.items,
-    payment_method: body.payment_method ?? existing.payment_method,
-    note: body.note ?? existing.note,
-    transaction_date: body.transaction_date ?? existing.transaction_date,
-    staff_id: resolvedStaff.staff_id,
-    staff_name: resolvedStaff.staff_name,
-  }
+  const updateData = buildUpdateTransactionPayload(existing, body, resolvedStaff)
 
   await TransactionModel.updateOne({ transaction_id: id }, updateData)
   ctx.body = { code: 0, message: '更新成功', data: null }

@@ -12,6 +12,9 @@
     "build:miniapp": "pnpm --filter @hair/miniapp build:mp-weixin",
     "build:admin": "pnpm --filter @hair/admin build",
     "build:shared": "pnpm --filter @hair/shared build",
+    "test": "vitest run",
+    "test:shared": "vitest run packages/shared/src/utils/__tests__/helpers.test.ts",
+    "test:server": "vitest run packages/server/src/domain",
     "lint": "eslint \"packages/*/src/**/*.ts\"",
     "clean": "rimraf packages/*/dist"
   },
@@ -20,7 +23,8 @@
     "@typescript-eslint/parser": "^7.0.0",
     "eslint": "^8.57.0",
     "rimraf": "^5.0.5",
-    "typescript": "5.5.4"
+    "typescript": "5.5.4",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "@koa/cors": "^5.0.0",

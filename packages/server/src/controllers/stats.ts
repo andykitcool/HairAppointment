@@ -1,5 +1,6 @@
 import { Context } from 'koa'
 import { TransactionModel, AppointmentModel } from '../models/index.js'
+import { buildRevenueStatsData, resolveStatsDateRange } from '../domain/stats/rules.js'
 
 /**
  * 营收统计
@@ -15,19 +16,14 @@ export async function getRevenueStats(ctx: Context) {
   }
 
   try {
-    const today = new Date()
-    const todayStr = today.toISOString().slice(0, 10)
-    const start = start_date || todayStr
-    const end = end_date || todayStr
+    const range = resolveStatsDateRange(start_date, end_date)
+    const { start, end } = range
 
     // 总营收
     const revenueResult = await TransactionModel.aggregate([
       { $match: { merchant_id: mid, transaction_date: { $gte: start, $lte: end } } },
       { $group: { _id: null, total: { $sum: '$total_amount' }, count: { $sum: 1 } } },
     ])
-    const total_revenue = revenueResult[0]?.total || 0
-    const total_transactions = revenueResult[0]?.count || 0
-
     // 预约统计
     const aptResult = await AppointmentModel.aggregate([
       { $match: { merchant_id: mid, date: { $gte: start, $lte: end } } },
@@ -36,9 +32,6 @@ export async function getRevenueStats(ctx: Context) {
         count: { $sum: 1 },
       } },
     ])
-    const total_appointments = aptResult.reduce((sum: number, r: any) => sum + r.count, 0)
-    const completed_appointments = aptResult.find((r: any) => r._id === 'completed')?.count || 0
-    const cancelled_appointments = aptResult.find((r: any) => r._id === 'cancelled')?.count || 0
 
     // 每日营收
     const dailyRevenue = await TransactionModel.aggregate([
@@ -62,19 +55,7 @@ export async function getRevenueStats(ctx: Context) {
     ctx.body = {
       code: 0,
       message: 'ok',
-      data: {
-        total_revenue,
-        total_transactions,
-        total_appointments,
-        completed_appointments,
-        cancelled_appointments,
-        daily_revenue: dailyRevenue.map((r) => ({ date: r._id, revenue: r.revenue })),
-        service_ranking: serviceRanking.map((r) => ({
-          service_name: r._id,
-          count: r.count,
-          revenue: r.revenue,
-        })),
-      },
+      data: buildRevenueStatsData(revenueResult, aptResult, dailyRevenue, serviceRanking),
     }
   } catch (err: any) {
     ctx.status = 500
