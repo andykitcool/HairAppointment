@@ -5,9 +5,7 @@ import { UserModel } from '../models/index.js'
  * 获取顾客列表
  */
 export async function getCustomers(ctx: Context) {
-  const { merchant_id, page = '1', pageSize = '20', keyword } = ctx.query as any
-  const user = ctx.state.user
-  const mid = merchant_id || user.merchant_id
+  const { page = '1', pageSize = '20', keyword } = ctx.query as any
 
   const query: Record<string, any> = { role: 'customer' }
   if (keyword) {

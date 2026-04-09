@@ -1,6 +1,6 @@
 import { Context } from 'koa'
 import { MerchantModel, AdminModel, AppointmentModel, TransactionModel, UserModel, ServiceModel, StaffModel, PlatformAdModel, PlatformConfigModel } from '../models/index.js'
-import { generateShortId, PRESET_SERVICES, UserRole } from '../../../shared/dist/index.js'
+import { generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
 import bcrypt from 'bcryptjs'
 import { initializeMerchant } from './merchant.js'
 

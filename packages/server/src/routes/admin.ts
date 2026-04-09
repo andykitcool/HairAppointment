@@ -1,6 +1,5 @@
 import Router from 'koa-router'
 import * as adminController from '../controllers/admin.js'
-import { authMiddleware } from '../middleware/auth.js'
 import { sessionAuthMiddleware } from '../middleware/session.js'
 
 const router = new Router({ prefix: '/api/admin' })

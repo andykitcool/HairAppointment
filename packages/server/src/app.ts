@@ -3,7 +3,6 @@ import { koaBody } from 'koa-body'
 import cors from '@koa/cors'
 import fs from 'fs'
 import path from 'path'
-import { fileURLToPath } from 'url'
 import { config } from './config/index.js'
 import { connectDatabase } from './config/database.js'
 import { connectRedis } from './config/redis.js'
@@ -12,8 +11,10 @@ import { logger } from './middleware/logger.js'
 import { registerRoutes } from './routes/index.js'
 import { initCronJobs } from './cron/index.js'
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+function resolveCorsOrigin(requestOrigin?: string): string {
+  if (!requestOrigin) return ''
+  return config.corsAllowedOrigins.includes(requestOrigin) ? requestOrigin : ''
+}
 
 async function bootstrap() {
   await connectDatabase()
@@ -24,7 +25,7 @@ async function bootstrap() {
   app.use(errorHandler)
   app.use(logger)
   app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174'],
+    origin: (requestOrigin: string | undefined) => resolveCorsOrigin(requestOrigin),
     credentials: true,
   }))
 

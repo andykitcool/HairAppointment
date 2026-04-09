@@ -1,6 +1,6 @@
 import { Context } from 'koa'
 import { MerchantModel, UserModel, ServiceModel, StaffModel, AppointmentModel, TransactionModel, AdminModel } from '../models/index.js'
-import { AppointmentStatus, generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
+import { generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
 
 const DEFAULT_MEMBERSHIP_LEVELS = ['普通会员', '银卡会员', '金卡会员', '钻石会员']
 

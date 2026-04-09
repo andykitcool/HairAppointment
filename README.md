@@ -153,6 +153,12 @@ docker compose -f docker-compose.yml up -d
 - 打开管理后台：`http://<host>:9080`
 - 确认上传文件在重启容器后仍可访问，当前已挂载 `uploads-data` 持久卷
 
+### 生产环境变量要求
+
+- `JWT_SECRET` 必须替换为长度不少于 16 位的强随机值，服务端已拒绝弱默认值启动
+- `WX_APPID` / `WX_APPSECRET` 在生产环境中不得保留示例占位值
+- `CORS_ALLOWED_ORIGINS` 使用英文逗号分隔允许跨域访问的来源；如果 admin 与 API 通过同域反代访问，可保持为空
+
 ### 4. 小程序发布前要求
 
 - 在构建前注入 `VITE_API_BASE_URL`

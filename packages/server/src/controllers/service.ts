@@ -1,6 +1,6 @@
 import { Context } from 'koa'
 import { ServiceModel } from '../models/index.js'
-import { generateShortId, PRESET_SERVICES } from '../../../shared/dist/index.js'
+import { generateShortId } from '../../../shared/dist/index.js'
 
 function normalizeStages(stages: any, fallbackName: string, fallbackDuration: number) {
   const normalized = Array.isArray(stages)

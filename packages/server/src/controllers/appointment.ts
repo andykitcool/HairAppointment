@@ -1,8 +1,6 @@
 import { Context } from 'koa'
 import { AdminModel, AppointmentModel, ServiceModel, StaffModel, MerchantModel, TransactionModel, UserModel } from '../models/index.js'
-import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateAppointmentId, generateTimeSlots, formatDate } from '../../../shared/dist/index.js'
-import { AppointmentStatus } from '../../../shared/dist/index.js'
-import { generateAppointmentId as genAptId } from '../../../shared/dist/index.js'
+import { generateShortId, isTimeOverlap, generateTimeline, getBusyRanges, timeToMinutes, generateTimeSlots, formatDate } from '../../../shared/dist/index.js'
 
 const WEEK_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
 
@@ -141,8 +139,6 @@ export async function getAvailableSlots(ctx: Context) {
       // 检查是否与已有预约冲突
       if (available) {
         for (const apt of existingAppointments) {
-          // 预约结束时间
-          const aptEndTime = apt.end_time
           // 新预约结束时间
           const newEndMinutes = timeToMinutes(slot.start) + serviceDuration
           const newEndTime = `${String(Math.floor(newEndMinutes / 60)).padStart(2, '0')}:${String(newEndMinutes % 60).padStart(2, '0')}`
@@ -261,7 +257,7 @@ export async function createAppointment(ctx: Context) {
       custPhone = user?.phone
     }
 
-    const appointment = await AppointmentModel.create({
+    await AppointmentModel.create({
       appointment_id: appointmentId,
       merchant_id,
       customer_id: custId,
@@ -369,7 +365,7 @@ export async function updateAppointment(ctx: Context) {
   }
 
   // 如果修改了时间或服务，需要重新生成 timeline
-  let updateData: Record<string, any> = { ...body }
+  const updateData: Record<string, any> = { ...body }
   if (body.service_id || body.start_time) {
     const service = body.service_id
       ? await ServiceModel.findOne({ service_id: body.service_id })
@@ -456,7 +452,7 @@ export async function confirmAppointment(ctx: Context) {
  * 散客登记（COZE）
  */
 export async function walkIn(ctx: Context) {
-  const { merchant_id, service_name, customer_name, customer_phone, duration } = ctx.request.body as any
+  const { merchant_id, service_name, customer_name, customer_phone } = ctx.request.body as any
 
   // 模糊匹配服务
   const service = await ServiceModel.findOne({

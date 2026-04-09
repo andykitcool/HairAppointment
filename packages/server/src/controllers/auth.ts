@@ -1,7 +1,7 @@
 import { Context } from 'koa'
 import { UserModel, MerchantModel, StaffModel, ServiceModel } from '../models/index.js'
-import { signJwt, verifyJwt } from '../middleware/auth.js'
-import { PRESET_SERVICES, generateShortId } from '../../../shared/dist/index.js'
+import { signJwt } from '../middleware/auth.js'
+import { generateShortId } from '../../../shared/dist/index.js'
 import axios from 'axios'
 import { getActiveMpConfig } from './wechatConfig.js'
 
@@ -78,7 +78,7 @@ export async function wechatLogin(ctx: Context) {
       },
     })
 
-    const { openid, session_key, unionid } = wxRes.data
+    const { openid, unionid } = wxRes.data
     if (!openid) {
       console.error('[wechatLogin] jscode2session failed:', wxRes.data)
       ctx.body = { code: 400, message: '微信登录失败', data: wxRes.data }
