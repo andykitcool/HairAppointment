@@ -131,6 +131,34 @@ docker compose -f docker-compose.yml build api admin
 docker compose -f docker-compose.yml up -d
 ```
 
+如果生产环境通过镜像仓库拉取部署，推荐使用仓库根目录新增的 `docker-compose.images.yml`：
+
+```bash
+# 1) 准备镜像部署变量
+Copy-Item .env.images.example .env.images
+
+# 2) 登录镜像仓库
+docker login <your-registry>
+
+# 3) 构建并推送 API / Admin 镜像
+docker build -f packages/server/Dockerfile -t <image-prefix>/api:<tag> .
+docker build -f packages/admin/Dockerfile -t <image-prefix>/admin:<tag> .
+docker push <image-prefix>/api:<tag>
+docker push <image-prefix>/admin:<tag>
+
+# 4) 在生产服务器拉取并启动
+docker compose --env-file .env.images -f docker-compose.images.yml pull
+docker compose --env-file .env.images -f docker-compose.images.yml up -d
+```
+
+其中：
+
+- `<image-prefix>` 形如 `registry.example.com/your-namespace/hairappointment`
+- `<tag>` 建议使用发布日期或 Git commit SHA，避免线上误拉取 `latest`
+- `.env` 继续提供 API 运行时环境变量，`.env.images` 负责镜像地址与标签
+
+当前 `packages/server/Dockerfile` 已在构建 API 镜像时一并构建并打包微信小程序产物，因此线上后台的“小程序上传代码”功能可以直接复用镜像内的 `packages/miniapp/dist/build/mp-weixin`
+
 包含以下服务：
 
 | 服务 | 容器名 | 端口 | 说明 |
@@ -152,6 +180,7 @@ docker compose -f docker-compose.yml up -d
 - 访问 API 健康检查：`http://<host>:3100/health`
 - 打开管理后台：`http://<host>:9080`
 - 确认上传文件在重启容器后仍可访问，当前已挂载 `uploads-data` 持久卷
+- 如果启用了后台“小程序代码上传”，可在管理后台执行一次上传，确认 API 容器内置的小程序构建产物可正常被 `miniprogram-ci` 使用
 
 ### 生产环境变量要求
 
@@ -234,6 +263,7 @@ COZE_API_ENDPOINT=https://api.coze.cn/v1
 - 当前 `pnpm-lock.yaml` 与部分 `package.json` 仍有漂移；Dockerfile 现使用 `pnpm install --no-frozen-lockfile` 作为临时兜底，适合继续测试，不适合作为最终可复现发布基线。
 - 本机 `pnpm install --lockfile-only` 在当前环境会触发 `ERR_INVALID_THIS` 拉取元数据失败，因此 lockfile 需要在网络与 pnpm 环境正常的机器上回正后再提交。
 - `pnpm lint` 目前只覆盖 `packages/*/src/**/*.ts`，尚未覆盖 `.vue` 单文件组件。
+- 新增的 `docker-compose.images.yml` 依赖 `.env.images` 提供 `IMAGE_PREFIX` 和 `IMAGE_TAG`；若缺失这两个变量，Compose 无法解析 API/Admin 镜像地址。
 - 飞书同步、短信/通知等模块仍存在 TODO 占位逻辑，适合功能受控测试，不建议在公开环境默认开启相关承诺能力。
 
 ## 开发规范

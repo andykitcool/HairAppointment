@@ -1,0 +1,53 @@
+services:
+  mongo:
+    image: ${MONGO_IMAGE:-mongo:7}
+    container_name: hair-mongo
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27018:27017"
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    container_name: hair-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6380:6379"
+
+  api:
+    image: ${IMAGE_PREFIX}/api:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: hair-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/hair_appointment}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+    volumes:
+      - uploads-data:/app/uploads
+    ports:
+      - "3100:3000"
+    depends_on:
+      - mongo
+      - redis
+
+  admin:
+    image: ${IMAGE_PREFIX}/admin:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: hair-admin
+    restart: unless-stopped
+    ports:
+      - "9080:80"
+    depends_on:
+      - api
+
+volumes:
+  mongo-data:
+  redis-data:
+  uploads-data:

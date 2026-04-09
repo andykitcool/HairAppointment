@@ -4,7 +4,6 @@ dist
 .env
 *.log
 uploads
-packages/miniapp
 packages/admin/dist
 packages/server/dist
 packages/shared/dist
