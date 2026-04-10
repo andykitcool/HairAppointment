@@ -12,6 +12,8 @@
     "build:miniapp": "pnpm --filter @hair/miniapp build:mp-weixin",
     "build:admin": "pnpm --filter @hair/admin build",
     "build:shared": "pnpm --filter @hair/shared build",
+    "db:init": "docker compose --profile init up db-seed",
+    "db:init:images": "docker compose --env-file .env.images -f docker-compose.images.yml --profile init up db-seed",
     "test": "vitest run",
     "test:shared": "vitest run packages/shared/src/utils/__tests__/helpers.test.ts",
     "test:server": "vitest run packages/server/src/domain",

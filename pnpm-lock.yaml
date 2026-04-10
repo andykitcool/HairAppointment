@@ -100,6 +100,9 @@ importers:
         specifier: ^4.3.0
         version: 4.6.4(vue@3.5.32(typescript@5.9.3))
     devDependencies:
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.38
       '@vitejs/plugin-vue':
         specifier: ^5.0.4
         version: 5.2.4(vite@5.4.21(@types/node@20.19.38)(less@4.5.1)(sass@1.99.0)(terser@5.46.1))(vue@3.5.32(typescript@5.9.3))
@@ -231,6 +234,9 @@ importers:
       '@types/node-cron':
         specifier: ^3.0.11
         version: 3.0.11
+      '@types/nodemailer':
+        specifier: ^6.4.16
+        version: 6.4.23
       tsx:
         specifier: ^4.11.0
         version: 4.21.0
@@ -2965,6 +2971,9 @@ packages:
 
   '@types/node@20.19.38':
     resolution: {integrity: sha512-grSwveyouVpXDwUvnpIb5noOpZQGOzbVdZXdjw8P9WOjnrUenKj2YuIh35OpXQ+UCmMQEgyvRobT5uuK9iDCUQ==}
+
+  '@types/nodemailer@6.4.23':
+    resolution: {integrity: sha512-aFV3/NsYFLSx9mbb5gtirBSXJnAlrusoKNuPbxsASWc7vrKLmIrTQRpdcxNcSFL3VW2A2XpeLEavwb2qMi6nlQ==}
 
   '@types/prettier@2.7.3':
     resolution: {integrity: sha512-+68kP9yzs4LMp7VNh8gdzMSPZFL44MLGqiHWvttYJe+6qnuVr4Ek9wSBQoveqY/r+LwjCcU29kNVkidwim+kYA==}
@@ -11782,6 +11791,10 @@ snapshots:
   '@types/node@20.19.38':
     dependencies:
       undici-types: 6.21.0
+
+  '@types/nodemailer@6.4.23':
+    dependencies:
+      '@types/node': 20.19.38
 
   '@types/prettier@2.7.3': {}
 

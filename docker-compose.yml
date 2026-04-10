@@ -53,6 +53,25 @@ services:
     depends_on:
       - api
 
+  db-seed:
+    image: mongo:7
+    container_name: hair-db-seed
+    profiles:
+      - init
+    volumes:
+      - ./scripts:/scripts:ro
+    command: >
+      sh -c "
+        until mongosh mongodb://mongo:27017/hair_appointment --quiet --eval 'db.runCommand({ ping: 1 }).ok' >/dev/null 2>&1; do
+          echo 'waiting for mongo...';
+          sleep 2;
+        done;
+        mongosh mongodb://mongo:27017/hair_appointment /scripts/init-dev-data-mongo.js
+      "
+    depends_on:
+      - mongo
+    restart: 'no'
+
 volumes:
   mongo-data:
   redis-data:

@@ -11,19 +11,11 @@ COPY packages/admin/package.json ./packages/admin/
 
 RUN pnpm install --no-frozen-lockfile
 
-# Force rebuild - cache buster v2
-RUN echo "Cache bust v2: $(date)"
-
 COPY packages/shared/ ./packages/shared/
 COPY packages/admin/ ./packages/admin/
 
-# Build shared package
-RUN ./node_modules/.bin/tsc -p packages/shared/tsconfig.json
-
-# Build admin: use node to invoke vue-tsc and vite directly from root node_modules
-RUN cd packages/admin && \
-    node /app/node_modules/vue-tsc/bin/vue-tsc.js -b && \
-    node /app/node_modules/vite/bin/vite.js build
+# Build with workspace scripts to avoid hard-coded binary paths
+RUN pnpm --filter @hair/shared build && pnpm --filter @hair/admin build
 
 # Production stage - Nginx
 FROM nginx:alpine

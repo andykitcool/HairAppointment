@@ -75,6 +75,22 @@ function buildUploadPublicUrl(ctx: Context, fileName: string) {
   return `${proto}://${host}/uploads/${fileName}`
 }
 
+function extractLocalUploadFileName(rawUrl: string) {
+  const match = String(rawUrl || '').match(/\/uploads\/([^?#]+)/)
+  if (!match?.[1]) return ''
+  const decoded = decodeURIComponent(match[1])
+  return path.basename(decoded)
+}
+
+function removeLocalUploadFileByUrl(rawUrl: string) {
+  const fileName = extractLocalUploadFileName(rawUrl)
+  if (!fileName) return
+  const filePath = path.join(process.cwd(), 'uploads', fileName)
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
+  }
+}
+
 function isLocalUploadUrl(rawUrl: string) {
   return String(rawUrl || '').includes('/uploads/')
 }
@@ -267,6 +283,7 @@ export async function hairstyleRecommend(ctx: Context) {
     const clientId = String(bodyData.client_id || '').trim().slice(0, 64) || 'global'
     const { userId, merchantId: userMerchantId } = await getOptionalUserContext(ctx)
     const merchantId = String(bodyData.merchant_id || '').trim() || userMerchantId
+    const snapshotFilter = userId ? { user_id: userId } : { client_id: clientId }
 
     if (userId && merchantId) {
       const merchant = await MerchantModel.findOne({ merchant_id: merchantId }, { ai_image_settings: 1 }).lean()
@@ -320,6 +337,16 @@ export async function hairstyleRecommend(ctx: Context) {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true })
     }
+
+    const latestSnapshot = await PlatformAiSnapshotModel.findOne(snapshotFilter, { input_image_url: 1 }).lean()
+    if (latestSnapshot?.input_image_url) {
+      try {
+        removeLocalUploadFileByUrl(String(latestSnapshot.input_image_url))
+      } catch {
+        // 删除旧图失败不阻断本次上传
+      }
+    }
+
     fs.copyFileSync(tempPath, path.join(uploadDir, fileName))
 
     const inputImageUrl = buildUploadPublicUrl(ctx, fileName)
@@ -337,7 +364,7 @@ export async function hairstyleRecommend(ctx: Context) {
     aiTaskStore.set(taskId, initialTask)
 
     await PlatformAiSnapshotModel.findOneAndUpdate(
-      userId ? { user_id: userId } : { client_id: clientId },
+      snapshotFilter,
       {
         $set: {
           client_id: clientId,
@@ -374,7 +401,7 @@ export async function hairstyleRecommend(ctx: Context) {
           updated_at: Date.now(),
         })
         await PlatformAiSnapshotModel.findOneAndUpdate(
-          userId ? { user_id: userId } : { client_id: clientId },
+          snapshotFilter,
           {
             $set: {
               user_id: userId,
@@ -430,7 +457,7 @@ export async function hairstyleRecommend(ctx: Context) {
           updated_at: Date.now(),
         })
         await PlatformAiSnapshotModel.findOneAndUpdate(
-          userId ? { user_id: userId } : { client_id: clientId },
+          snapshotFilter,
           {
             $set: {
               user_id: userId,
@@ -454,7 +481,7 @@ export async function hairstyleRecommend(ctx: Context) {
           updated_at: Date.now(),
         })
         await PlatformAiSnapshotModel.findOneAndUpdate(
-          userId ? { user_id: userId } : { client_id: clientId },
+          snapshotFilter,
           {
             $set: {
               user_id: userId,

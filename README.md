@@ -129,6 +129,9 @@ pnpm build:miniapp
 ```bash
 docker compose -f docker-compose.yml build api admin
 docker compose -f docker-compose.yml up -d
+
+# 首次部署（或需要重置演示数据）可执行一次开发环境同款初始化数据
+docker compose -f docker-compose.yml --profile init up db-seed
 ```
 
 如果生产环境通过镜像仓库拉取部署，推荐使用仓库根目录新增的 `docker-compose.images.yml`：
@@ -149,6 +152,9 @@ docker push <image-prefix>/admin:<tag>
 # 4) 在生产服务器拉取并启动
 docker compose --env-file .env.images -f docker-compose.images.yml pull
 docker compose --env-file .env.images -f docker-compose.images.yml up -d
+
+# 5) 首次部署（或需要重置演示数据）执行数据库初始化
+docker compose --env-file .env.images -f docker-compose.images.yml --profile init up db-seed
 ```
 
 其中：
@@ -156,6 +162,7 @@ docker compose --env-file .env.images -f docker-compose.images.yml up -d
 - `<image-prefix>` 形如 `registry.example.com/your-namespace/hairappointment`
 - `<tag>` 建议使用发布日期或 Git commit SHA，避免线上误拉取 `latest`
 - `.env` 继续提供 API 运行时环境变量，`.env.images` 负责镜像地址与标签
+- `db-seed` 为一次性初始化服务，脚本位于 `scripts/init-dev-data-mongo.js`，内容按开发环境默认演示数据（管理员、演示门店、服务、员工、平台默认配置）进行幂等初始化
 
 当前 `packages/server/Dockerfile` 已在构建 API 镜像时一并构建并打包微信小程序产物，因此线上后台的“小程序上传代码”功能可以直接复用镜像内的 `packages/miniapp/dist/build/mp-weixin`
 
